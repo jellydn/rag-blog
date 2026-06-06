@@ -1,0 +1,28 @@
+# Data (generated content, vector DB)
+data/content/
+data/chunks/
+data/lancedb/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+
+# Environment
+.env
+*.pkl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
