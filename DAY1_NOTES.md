@@ -44,3 +44,7 @@ A fully functional RAG engine that indexes my blog content (productsway.com) and
 - Blog: https://productsway.com
 - LanceDB: https://lancedb.github.io/lancedb/
 - Sentence-Transformers: https://www.sbert.net/
+
+---
+_This PR is part of the 7-day AI Engineer journey._
+
