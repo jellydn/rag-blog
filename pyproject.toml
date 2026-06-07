@@ -39,5 +39,5 @@ ignore = ["E501"]
 environment = { python-version = "3.10" }
 
 [tool.ty.src]
-include = ["chunking.py", "config.py", "rag_pipeline.py", "scrape_content.py", "server.py", "query.py", "git_push.py"]
+include = ["agentic.py", "chunking.py", "config.py", "rag_pipeline.py", "scrape_content.py", "server.py", "query.py", "git_push.py"]
 exclude = ["data", ".venv"]

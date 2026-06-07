@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from agentic import AgentOrchestrator
 from config import MODEL_NAME
 from rag_pipeline import HybridSearch, create_hybrid_search
 
@@ -26,6 +27,7 @@ app.add_middleware(
 )
 
 _hybrid = None
+_agent = None
 
 
 def get_hybrid() -> HybridSearch:
@@ -33,6 +35,13 @@ def get_hybrid() -> HybridSearch:
     if _hybrid is None:
         _hybrid = create_hybrid_search()
     return _hybrid
+
+
+def get_agent() -> AgentOrchestrator:
+    global _agent
+    if _agent is None:
+        _agent = AgentOrchestrator(get_hybrid())
+    return _agent
 
 
 def hybrid_search(query: str, top_k: int = 5):
@@ -54,6 +63,16 @@ class SearchResult(BaseModel):
     context: str
     timing: dict
     total_chunks: int
+
+
+class AgentResult(BaseModel):
+    query: str
+    route: dict
+    plan: dict
+    results: list
+    reflection: dict
+    answer: str
+    timing: dict
 
 
 @app.get("/health")
@@ -83,6 +102,19 @@ def query(
     return result
 
 
+@app.get("/agent/query", response_model=AgentResult)
+def agent_query(
+    q: str = Query(..., description="Search query"),
+    top_k: int = Query(5, description="Number of results"),
+):
+    t0 = time.time()
+    agent = get_agent()
+    run = agent.run(q, top_k=top_k)
+    payload = agent.to_dict(run)
+    payload["timing"] = {"api_ms": round((time.time() - t0) * 1000, 1)}
+    return payload
+
+
 @app.get("/query/stream")
 def query_stream(
     q: str = Query(..., description="Search query"),
@@ -95,6 +127,30 @@ def query_stream(
         for i, r in enumerate(result["results"]):
             yield f"data: {json.dumps({'type': 'result', 'index': i + 1, **r})}\n\n"
         yield f"data: {json.dumps({'type': 'context', 'context': result['context'][:500]})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/agent/query/stream")
+def agent_query_stream(
+    q: str = Query(..., description="Search query"),
+    top_k: int = Query(5, description="Number of results"),
+):
+    agent = get_agent()
+    run = agent.run(q, top_k=top_k)
+    payload = agent.to_dict(run)
+
+    async def event_stream():
+        yield f"data: {json.dumps({'type': 'route', 'route': payload['route'], 'plan': payload['plan']})}\n\n"
+        for i, r in enumerate(payload["results"]):
+            yield f"data: {json.dumps({'type': 'result', 'index': i + 1, **r})}\n\n"
+        yield f"data: {json.dumps({'type': 'reflection', 'reflection': payload['reflection']})}\n\n"
+        yield f"data: {json.dumps({'type': 'answer', 'answer': payload['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
