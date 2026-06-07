@@ -30,7 +30,7 @@ Scrape → Chunk → Embed → Store → Search
 
 ## Install
 
-Python 3.10+ recommended.
+Python **3.12** via `mise.toml` (3.10+ supported per `pyproject.toml`).
 
 ```bash
 git clone https://github.com/jellydn/rag-blog.git
@@ -65,25 +65,41 @@ Generated artifacts (gitignored): `data/content/`, `data/chunks/`, `data/lancedb
 ### Tests and quality
 
 ```bash
-# quality (Ruff + ty + tests) — https://docs.astral.sh/ruff/ https://docs.astral.sh/ty/
-just check
-# or: uv run ruff check . && uv run ty check && uv run python -m unittest discover -s tests -v
-
-# git hooks
-just prek-install && just prek
+mise run check        # Ruff + ty + tests (preferred)
+just check            # same
+mise run prek         # git-hook parity: prek run --all-files
+prek install          # once: install hooks from prek.toml
 ```
+
+[Ruff](https://docs.astral.sh/ruff/) and [ty](https://docs.astral.sh/ty/) run via `uv run` inside the project venv.
+
+### Development tasks
+
+| Command | What it does |
+| -------- | ------------- |
+| `mise run install` | `uv sync` — app + dev deps from `uv.lock` |
+| `mise run pipeline` | Scrape + ingest |
+| `mise run serve` | API with reload (`:8000`) |
+| `mise run test` | Chunker unit tests only |
+| `mise run check` | Lint, format check, typecheck, tests |
+| `mise run prek` | All prek hooks on the repo |
+| `just docker-*` | Build / ingest / up / logs (see Docker below) |
+
+Equivalent **`just`** recipes: `just install`, `just pipeline`, `just serve`, `just prek`, etc.
 
 ## Usage
 
 ```bash
 # 1. Scrape markdown from productsway.com
-python scrape_content.py
+uv run python scrape_content.py
+# or: mise run pipeline   # scrape + step 2
 
 # 2. Chunk, embed, and build LanceDB + BM25
-python rag_pipeline.py
+uv run python rag_pipeline.py
 
 # 3. API server (default http://0.0.0.0:8000)
-python server.py
+uv run uvicorn server:app --host 0.0.0.0 --port 8000
+# or: mise run serve
 
 # 4. Hybrid search
 curl "http://localhost:8000/query?q=how+to+set+up+neovim+folding&top_k=5"
@@ -92,8 +108,8 @@ curl "http://localhost:8000/query?q=how+to+set+up+neovim+folding&top_k=5"
 curl -N "http://localhost:8000/query/stream?q=typescript+absolute+imports"
 
 # CLI (no server; first run downloads the embedding model)
-python query.py "how to cherry pick from a pull request"
-python query.py --json "neovim folding"
+uv run python query.py "how to cherry pick from a pull request"
+uv run python query.py --json "neovim folding"
 ```
 
 If hybrid search fails with a missing BM25 file, run ingest again so `data/lancedb/bm25_data.json` is created (or updated after chunk-id changes).
@@ -139,7 +155,8 @@ JSON responses include a `timing` object: `vector_search_ms`, `bm25_search_ms`, 
 ├── rag_pipeline.py      # Ingest, LanceDB, BM25, HybridSearch, create_hybrid_search()
 ├── server.py            # FastAPI routes; lazy singleton via get_hybrid()
 ├── query.py             # CLI wrapper around the same get_hybrid() engine
-├── Dockerfile           # API image (uvicorn)
+├── AGENTS.md            # Agent-oriented quick reference
+├── Dockerfile           # API image (uv + uvicorn)
 ├── docker-compose.yml   # api + optional ingest profile
 ├── mise.toml            # mise tools + uv venv auto + tasks (mise run …)
 ├── justfile             # install, test, lint, prek, serve, docker
@@ -186,6 +203,7 @@ Design rationale is recorded as [ADRs in `doc/adr/`](./doc/adr/README.md) (hybri
 
 ## References
 
+- [mise](https://mise.jdx.dev/) · [uv](https://docs.astral.sh/uv/) · [Ruff](https://docs.astral.sh/ruff/) · [ty](https://docs.astral.sh/ty/)
 - [LanceDB](https://lancedb.github.io/lancedb/)
 - [Sentence-Transformers](https://www.sbert.net/)
 - [Productsway](https://productsway.com/)

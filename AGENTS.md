@@ -21,13 +21,16 @@ mise run serve
 
 # CLI search
 uv run python query.py "your question"
+
+# Docker (API + volume-backed /data)
+just docker-ingest && just docker-up-d
 ```
 
-Tooling: **uv** (deps), **Ruff**, **ty**, **just**, **prek** — versions pinned in `mise.toml`. With `mise activate`, `.venv` auto-sources via `python.uv_venv_auto` + `uv.lock`.
+Tooling: **mise.toml** pins Python 3.12, **uv**, **ruff**, **ty**, **just**, **prek**. Deps in `pyproject.toml` / `uv.lock`. Docker image uses `uv sync --frozen --no-dev`. With `mise activate`, `.venv` auto-sources (`python.uv_venv_auto` + `uv.lock`).
 
 ## Key gotchas
 
-- **BM25 index must exist before search.** If hybrid search fails with missing BM25 file, run `python rag_pipeline.py` to recreate `data/lancedb/bm25_data.json`.
+- **BM25 index must exist before search.** If hybrid search fails with missing BM25 file, run `uv run python rag_pipeline.py` or `mise run pipeline` (after scrape) to recreate `data/lancedb/bm25_data.json`.
 - **Tests are ML-free.** Only `test_chunker.py` exists; it tests chunking logic (stdlib only). No integration tests requiring sentence-transformers.
 - **Embedding model loads lazily.** First `get_hybrid()` call downloads `all-MiniLM-L6-v2` (~80 MB). Subsequent calls use cached model.
 - **Data dir resolution** (`config.py`): checks `RAG_BLOG_DATA` env → `/opt/data/rag-blog/data` → `./data` (relative to repo). All generated data is gitignored.

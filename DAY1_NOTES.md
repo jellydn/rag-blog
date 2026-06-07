@@ -17,6 +17,7 @@ A fully functional RAG engine that indexes my blog content (productsway.com) and
 | **API** | FastAPI + SSE | Familiar, streaming built-in, CORS ready |
 | **BM25 persistence** | `bm25_data.json` + per-chunk metadata | Human-readable, no pickle; RRF uses chunk ids (`slug:index`) |
 | **Layout** | `config.py` / `chunking.py` (stdlib) + shared `get_hybrid()` | Scrape and tests avoid loading LanceDB/ST; CLI and API share one engine |
+| **Toolchain** | mise + uv + Ruff + ty + prek + Docker | Reproducible env (`mise.toml`, `uv.lock`); image built with `uv sync` |
 
 ### Surprises & Lessons
 

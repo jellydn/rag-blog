@@ -39,3 +39,11 @@ run = "prek run --all-files"
 [tasks.pipeline]
 description = "Scrape productsway.com and ingest"
 run = "uv run python scrape_content.py && uv run python rag_pipeline.py"
+
+[tasks.docker-ingest]
+description = "Scrape + ingest in Docker volume"
+run = "docker compose --profile ingest run --rm ingest"
+
+[tasks.docker-up]
+description = "Start API container (detached)"
+run = "docker compose up -d"
