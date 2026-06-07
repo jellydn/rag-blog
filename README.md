@@ -36,12 +36,18 @@ Python 3.10+ recommended.
 git clone https://github.com/jellydn/rag-blog.git
 cd rag-blog
 
-# Astral uv — https://docs.astral.sh/uv/
-curl -LsSf https://astral.sh/uv/install.sh | sh   # or: mise install uv
+# Recommended: mise (Python, uv, ruff, ty, just, prek) — https://mise.jdx.dev/
+mise trust
+mise install          # reads mise.toml
+mise run install      # uv sync
 
-uv sync          # .venv + locked deps (ruff, ty in dev group)
+# Or uv only — https://docs.astral.sh/uv/
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
 # or: just install
 ```
+
+With **mise** activated (`mise activate` in your shell), `cd` into the repo auto-activates **`.venv`** when `uv.lock` is present (`python.uv_venv_auto`).
 
 Legacy pip: `pip install -r requirements.txt` (prefer `uv sync` + `uv.lock`).
 
@@ -135,6 +141,7 @@ JSON responses include a `timing` object: `vector_search_ms`, `bm25_search_ms`, 
 ├── query.py             # CLI wrapper around the same get_hybrid() engine
 ├── Dockerfile           # API image (uvicorn)
 ├── docker-compose.yml   # api + optional ingest profile
+├── mise.toml            # mise tools + uv venv auto + tasks (mise run …)
 ├── justfile             # install, test, lint, prek, serve, docker
 ├── prek.toml            # prek / git hook config (ruff + builtins)
 ├── pyproject.toml       # project deps + Ruff + ty config

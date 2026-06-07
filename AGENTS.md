@@ -5,26 +5,25 @@ Python 3.10+ RAG engine for productsway.com. Hybrid search (vector + BM25) via R
 ## Quick commands
 
 ```bash
-# Setup
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+# Setup (mise + uv — see mise.toml)
+mise trust && mise install && mise run install
 
-# Ingestion pipeline (scrape → chunk → embed → store)
-python scrape_content.py          # fetch markdown from productsway.com → data/content/
-python rag_pipeline.py            # chunk + embed → data/lancedb/ + bm25_data.json
+# Quality
+mise run check          # or: just check  (ruff + ty + tests)
+mise run prek           # prek run --all-files
 
-# Run API server (port 8000)
-python server.py
+# Ingestion (scrape → chunk → embed → store)
+mise run pipeline
+# or: uv run python scrape_content.py && uv run python rag_pipeline.py
 
-# CLI search (no server needed)
-python query.py "your question"
-python query.py --json "neovim folding"
+# API (port 8000)
+mise run serve
 
-# Tests
-python -m unittest discover -s tests -v
+# CLI search
+uv run python query.py "your question"
 ```
 
-No lint, typecheck, or formatter is configured. No CI pipeline exists.
+Tooling: **uv** (deps), **Ruff**, **ty**, **just**, **prek** — versions pinned in `mise.toml`. With `mise activate`, `.venv` auto-sources via `python.uv_venv_auto` + `uv.lock`.
 
 ## Key gotchas
 
