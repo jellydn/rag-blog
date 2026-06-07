@@ -2,32 +2,42 @@
 
 set positional-arguments := true
 
+export PATH := justfile_directory() + "/.venv/bin:" + env_var_or_default("PATH", "")
+
 # Show recipes
 default:
     @just --list
 
-# Python dependencies (API + ingest)
+# Create .venv and install deps + dev tools (ruff, ty)
 install:
-    pip install -r requirements.txt
+    uv sync
 
-# Chunker tests (no sentence-transformers required)
+# Sync locked deps only
+sync:
+    uv sync --frozen
+
+# Chunker tests (stdlib; runs in uv venv)
 test:
-    python3 -m unittest discover -s tests -v
+    uv run python -m unittest discover -s tests -v
 
-# Lint
+# Ruff lint
 lint:
-    ruff check .
+    uv run ruff check .
 
-# Format (write)
+# Ruff format (write)
 fmt:
-    ruff format .
+    uv run ruff format .
 
-# Check format without writing
+# Ruff format check
 fmt-check:
-    ruff format --check .
+    uv run ruff format --check .
 
-# Lint + format check + tests
-check: lint fmt-check test
+# Astral ty type checker
+typecheck:
+    uv run ty check
+
+# Lint + format + types + tests
+check: lint fmt-check typecheck test
 
 # Install git hooks from prek.toml
 prek-install:
@@ -37,37 +47,35 @@ prek-install:
 prek *args:
     prek run --all-files {{args}}
 
-# Scrape → ingest → optional query (needs network + ML deps for ingest)
+# Scrape → ingest
 pipeline:
-    python3 scrape_content.py
-    python3 rag_pipeline.py
+    uv run python scrape_content.py
+    uv run python rag_pipeline.py
 
 # API server
 serve:
-    python3 server.py
+    uv run uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+
+# Lockfile from pyproject.toml
+lock:
+    uv lock
 
 # ── Docker ───────────────────────────────────────────────────────────────
 
-# Build image
 docker-build:
     docker compose build
 
-# Scrape + ingest into compose volume (first run)
 docker-ingest:
     docker compose --profile ingest run --rm ingest
 
-# Run API in foreground
 docker-up:
     docker compose up
 
-# Run API detached
 docker-up-d:
     docker compose up -d
 
-# Stop API
 docker-down:
     docker compose down
 
-# Tail API logs
 docker-logs:
     docker compose logs -f api

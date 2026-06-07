@@ -37,8 +37,8 @@ services:
       - -c
       - |
         set -e
-        python3 scrape_content.py
-        python3 rag_pipeline.py
+        uv run python scrape_content.py
+        uv run python rag_pipeline.py
         echo "Ingest complete. Start API: docker compose up -d api"
 
 volumes:

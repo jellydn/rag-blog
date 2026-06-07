@@ -88,7 +88,8 @@ class Embedder:
         print(f"Loading embedding model: {model_name}...")
         t0 = time.time()
         self.model = SentenceTransformer(model_name)
-        self.dimension = self.model.get_sentence_embedding_dimension()
+        dim = self.model.get_embedding_dimension()
+        self.dimension: int = int(dim) if dim is not None else 384
         print(f"  Model loaded in {time.time() - t0:.1f}s (dim={self.dimension})")
 
     def embed(self, texts: list[str]) -> np.ndarray:
@@ -237,6 +238,8 @@ class VectorStore:
         embeddings = embedder.embed(texts)
         if self.table is None:
             self._create_table()
+        table = self.table
+        assert table is not None
 
         import pyarrow as pa
 
@@ -253,13 +256,14 @@ class VectorStore:
                 "vector": [emb.tolist() for emb in embeddings],
             }
         )
-        self.table.add(batch)
-        print(f"  Ingested {len(chunks)} chunks → {self.table.count_rows()} total")
+        table.add(batch)
+        print(f"  Ingested {len(chunks)} chunks → {table.count_rows()} total")
 
     def vector_search(self, query_vector: list[float], top_k: int = 10) -> list[dict]:
-        if self.table is None:
+        table = self.table
+        if table is None:
             return []
-        results = self.table.search(query_vector).metric("cosine").limit(top_k).to_list()
+        results = table.search(query_vector).metric("cosine").limit(top_k).to_list()  # ty: ignore[unresolved-attribute]
         return [
             {
                 "id": r["id"],

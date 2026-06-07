@@ -36,11 +36,14 @@ Python 3.10+ recommended.
 git clone https://github.com/jellydn/rag-blog.git
 cd rag-blog
 
-python3 -m venv .venv
-source .venv/bin/activate
+# Astral uv — https://docs.astral.sh/uv/
+curl -LsSf https://astral.sh/uv/install.sh | sh   # or: mise install uv
 
-pip install -r requirements.txt
+uv sync          # .venv + locked deps (ruff, ty in dev group)
+# or: just install
 ```
+
+Legacy pip: `pip install -r requirements.txt` (prefer `uv sync` + `uv.lock`).
 
 ### Data directory
 
@@ -56,16 +59,12 @@ Generated artifacts (gitignored): `data/content/`, `data/chunks/`, `data/lancedb
 ### Tests and quality
 
 ```bash
-# chunker unit tests (stdlib only)
-python -m unittest discover -s tests -v
-
-# or with just (https://github.com/casey/just)
-just install
+# quality (Ruff + ty + tests) — https://docs.astral.sh/ruff/ https://docs.astral.sh/ty/
 just check
+# or: uv run ruff check . && uv run ty check && uv run python -m unittest discover -s tests -v
 
-# pre-commit hooks via prek
-prek install
-prek run --all-files
+# git hooks
+just prek-install && just prek
 ```
 
 ## Usage
@@ -138,8 +137,9 @@ JSON responses include a `timing` object: `vector_search_ms`, `bm25_search_ms`, 
 ├── docker-compose.yml   # api + optional ingest profile
 ├── justfile             # install, test, lint, prek, serve, docker
 ├── prek.toml            # prek / git hook config (ruff + builtins)
-├── pyproject.toml       # Ruff settings
-├── requirements.txt     # Python dependencies
+├── pyproject.toml       # project deps + Ruff + ty config
+├── uv.lock              # locked deps (uv)
+├── requirements.txt     # optional pip fallback
 ├── tests/               # Unit tests (chunker; no ML deps required)
 ├── DAY1_NOTES.md        # Build notes and trade-offs (7-day AI engineer track)
 ├── git_push.py          # Helper to push via GitHub Git Data API

@@ -17,7 +17,7 @@ hooks = [
     {
         id = "ruff-check",
         name = "Ruff lint",
-        entry = "ruff check .",
+        entry = "uv run ruff check .",
         language = "system",
         pass_filenames = false,
         types = ["python"],
@@ -25,7 +25,15 @@ hooks = [
     {
         id = "ruff-format",
         name = "Ruff format",
-        entry = "ruff format --check .",
+        entry = "uv run ruff format --check .",
+        language = "system",
+        pass_filenames = false,
+        types = ["python"],
+    },
+    {
+        id = "ty-check",
+        name = "ty typecheck",
+        entry = "uv run ty check",
         language = "system",
         pass_filenames = false,
         types = ["python"],
@@ -33,7 +41,7 @@ hooks = [
     {
         id = "unittest",
         name = "Unit tests (chunker)",
-        entry = "python3 -m unittest discover -s tests -v",
+        entry = "uv run python -m unittest discover -s tests -v",
         language = "system",
         pass_filenames = false,
         stages = ["manual", "pre-push"],
