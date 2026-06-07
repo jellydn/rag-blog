@@ -1,0 +1,49 @@
+# mise — https://mise.jdx.dev/
+# Trust once: mise trust
+# Enter dir: tools + .venv auto-activated (uv.lock present)
+
+[tools]
+python = "3.12"
+uv = "latest"
+ruff = "latest"
+ty = "latest"
+just = "latest"
+prek = "latest"
+
+[env]
+UV_PROJECT_ENVIRONMENT = ".venv"
+
+[settings]
+python.uv_venv_auto = "create|source"
+
+[tasks.install]
+description = "uv sync (deps + dev tools)"
+run = "uv sync"
+
+[tasks.check]
+description = "Ruff + ty + unit tests"
+run = "just check"
+
+[tasks.test]
+description = "Chunker unit tests"
+run = "uv run python -m unittest discover -s tests -v"
+
+[tasks.serve]
+description = "FastAPI dev server"
+run = "uv run uvicorn server:app --host 0.0.0.0 --port 8000 --reload"
+
+[tasks.prek]
+description = "Run all prek hooks"
+run = "prek run --all-files"
+
+[tasks.pipeline]
+description = "Scrape productsway.com and ingest"
+run = "uv run python scrape_content.py && uv run python rag_pipeline.py"
+
+[tasks.docker-ingest]
+description = "Scrape + ingest in Docker volume"
+run = "docker compose --profile ingest run --rm ingest"
+
+[tasks.docker-up]
+description = "Start API container (detached)"
+run = "docker compose up -d"

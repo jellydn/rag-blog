@@ -1,0 +1,43 @@
+[project]
+name = "rag-blog"
+version = "0.1.0"
+description = "Hybrid RAG for productsway.com"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "sentence-transformers>=2.2.0",
+    "lancedb>=0.6.0",
+    "numpy>=1.24.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "pyarrow>=14.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "ty>=0.0.40",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"git_push.py" = ["B008"]
+
+[tool.ty]
+# https://docs.astral.sh/ty/
+environment = { python-version = "3.10" }
+
+[tool.ty.src]
+include = ["chunking.py", "config.py", "rag_pipeline.py", "scrape_content.py", "server.py", "query.py", "git_push.py"]
+exclude = ["data", ".venv"]
