@@ -1,20 +1,94 @@
-# rag-blog — Production RAG engine for Productsway.com 👋
+# Welcome to rag-blog 👋
 
+![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#)
 [![Twitter: jellydn](https://img.shields.io/twitter/follow/jellydn.svg?style=social)](https://twitter.com/jellydn)
 
 > **Production RAG engine for [Productsway.com](https://productsway.com)** — hybrid search (vector + BM25) over blog and TIL content, powered by [sentence-transformers](https://www.sbert.net/) and [LanceDB](https://lancedb.github.io/lancedb/).
 
-Indexes posts and Today-I-Learned notes from productsway.com. Retrieval combines dense embeddings with BM25 keyword search, fused with Reciprocal Rank Fusion (RRF). No Postgres or Docker required for the vector store.
+Indexes posts and Today-I-Learned notes from [productsway.com](https://productsway.com). Retrieval combines dense embeddings with BM25 keyword search, fused with Reciprocal Rank Fusion (RRF). No Postgres or Docker required for the vector store (Docker is optional for deployment).
 
 ## Features
 
-- **Hybrid search** — `all-MiniLM-L6-v2` (384-dim) vector similarity plus custom BM25 (k1=1.5, b=0.75)
-- **Markdown-aware chunking** — splits on `##` / `###`, keeps code blocks intact, 512-char chunks with 64-char overlap
-- **File-based storage** — LanceDB on disk + serialized BM25 index (`bm25_data.json`)
-- **Streaming API** — FastAPI with JSON and Server-Sent Events (`/query/stream`)
-- **CLI** — `query.py` uses the same lazy-loaded search engine as the API (model loads on first query)
-- **Ops-friendly** — `/health`, `/stats`, CORS enabled for browser clients
+- **Hybrid search** — [sentence-transformers](https://www.sbert.net/) `all-MiniLM-L6-v2` (384-dim) + custom BM25, fused with RRF (70% vector / 30% BM25)
+- **Markdown-aware chunking** — splits on `##` / `###`, respects code fences; stable chunk ids `slug:index`
+- **File-based index** — [LanceDB](https://lancedb.github.io/lancedb/) on disk + `bm25_data.json` (no DB server)
+- **FastAPI** — JSON search and Server-Sent Events (`/query/stream`), `/health`, `/stats`
+- **CLI** — same hybrid engine as the API via lazy-loaded `get_hybrid()`
+- **Tooling** — [mise](https://mise.jdx.dev/), [uv](https://docs.astral.sh/uv/), [Ruff](https://docs.astral.sh/ruff/), [ty](https://docs.astral.sh/ty/), [prek](https://prek.j178.dev/), Docker Compose
+
+## Install
+
+```sh
+git clone https://github.com/jellydn/rag-blog.git
+cd rag-blog
+
+mise trust && mise install && mise run install
+```
+
+Or with [uv](https://docs.astral.sh/uv/) only:
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
+```
+
+With `mise activate` in your shell, entering the repo auto-activates `.venv` when `uv.lock` is present.
+
+Data defaults to `./data` (override with `RAG_BLOG_DATA`). See [Architecture decisions](./doc/adr/README.md).
+
+## Usage
+
+```sh
+# Scrape + ingest (first time, or after chunking changes)
+mise run pipeline
+
+# API — http://localhost:8000
+mise run serve
+
+# Query
+curl "http://localhost:8000/query?q=how+to+set+up+neovim+folding&top_k=5"
+curl -N "http://localhost:8000/query/stream?q=typescript+absolute+imports"
+
+# CLI (no server)
+uv run python query.py "how to cherry pick from a pull request"
+```
+
+If search fails with a missing BM25 file, run ingest again: `uv run python rag_pipeline.py`.
+
+### Docker
+
+```sh
+docker compose build
+docker compose --profile ingest run --rm ingest   # first time
+docker compose up -d
+# or: just docker-build && just docker-ingest && just docker-up-d
+```
+
+Port override: `RAG_BLOG_PORT=8080 docker compose up`. Index and HF cache use the `rag-data` volume.
+
+## API
+
+| Endpoint | Description |
+| -------- | ----------- |
+| `GET /health` | Liveness |
+| `GET /stats` | Chunks, model, BM25 term count |
+| `GET /query?q=...&top_k=5` | Hybrid search (JSON + `timing`) |
+| `GET /query/stream?q=...` | Same results as SSE |
+
+## Run tests
+
+```sh
+mise run test
+# or: just check   # ruff + ty + tests
+```
+
+Git hooks:
+
+```sh
+prek install
+mise run prek
+```
 
 ## Architecture
 
@@ -23,189 +97,22 @@ Scrape → Chunk → Embed → Store → Search
                           ↓
                     LanceDB + BM25
                           ↓
-                    Hybrid RRF (70% vector / 30% BM25)
+                    Hybrid RRF
                           ↓
               FastAPI (JSON + SSE) · CLI
 ```
 
-## Install
-
-Python **3.12** via `mise.toml` (3.10+ supported per `pyproject.toml`).
-
-```bash
-git clone https://github.com/jellydn/rag-blog.git
-cd rag-blog
-
-# Recommended: mise (Python, uv, ruff, ty, just, prek) — https://mise.jdx.dev/
-mise trust
-mise install          # reads mise.toml
-mise run install      # uv sync
-
-# Or uv only — https://docs.astral.sh/uv/
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
-# or: just install
-```
-
-With **mise** activated (`mise activate` in your shell), `cd` into the repo auto-activates **`.venv`** when `uv.lock` is present (`python.uv_venv_auto`).
-
-Legacy pip: `pip install -r requirements.txt` (prefer `uv sync` + `uv.lock`).
-
-### Data directory
-
-Data is stored under `./data` in the repo by default. Override with `RAG_BLOG_DATA` (directory that contains `content/`, `chunks/`, `lancedb/`). If `/opt/data/rag-blog/data` exists, that path is used instead (production layout).
-
-```bash
-# optional: production-style path
-export RAG_BLOG_DATA=/opt/data/rag-blog/data
-```
-
-Generated artifacts (gitignored): `data/content/`, `data/chunks/`, `data/lancedb/` (includes `bm25_data.json` after ingest).
-
-### Tests and quality
-
-```bash
-mise run check        # Ruff + ty + tests (preferred)
-just check            # same
-mise run prek         # git-hook parity: prek run --all-files
-prek install          # once: install hooks from prek.toml
-```
-
-[Ruff](https://docs.astral.sh/ruff/) and [ty](https://docs.astral.sh/ty/) run via `uv run` inside the project venv.
-
-### Development tasks
-
-| Command | What it does |
-| -------- | ------------- |
-| `mise run install` | `uv sync` — app + dev deps from `uv.lock` |
-| `mise run pipeline` | Scrape + ingest |
-| `mise run serve` | API with reload (`:8000`) |
-| `mise run test` | Chunker unit tests only |
-| `mise run check` | Lint, format check, typecheck, tests |
-| `mise run prek` | All prek hooks on the repo |
-| `just docker-*` | Build / ingest / up / logs (see Docker below) |
-
-Equivalent **`just`** recipes: `just install`, `just pipeline`, `just serve`, `just prek`, etc.
-
-## Usage
-
-```bash
-# 1. Scrape markdown from productsway.com
-uv run python scrape_content.py
-# or: mise run pipeline   # scrape + step 2
-
-# 2. Chunk, embed, and build LanceDB + BM25
-uv run python rag_pipeline.py
-
-# 3. API server (default http://0.0.0.0:8000)
-uv run uvicorn server:app --host 0.0.0.0 --port 8000
-# or: mise run serve
-
-# 4. Hybrid search
-curl "http://localhost:8000/query?q=how+to+set+up+neovim+folding&top_k=5"
-
-# SSE stream
-curl -N "http://localhost:8000/query/stream?q=typescript+absolute+imports"
-
-# CLI (no server; first run downloads the embedding model)
-uv run python query.py "how to cherry pick from a pull request"
-uv run python query.py --json "neovim folding"
-```
-
-If hybrid search fails with a missing BM25 file, run ingest again so `data/lancedb/bm25_data.json` is created (or updated after chunk-id changes).
-
-### Docker
-
-```bash
-# Build image
-docker compose build
-# or: just docker-build
-
-# First time: scrape + embed into a named volume
-docker compose --profile ingest run --rm ingest
-# or: just docker-ingest
-
-# Run API (http://localhost:8000)
-docker compose up -d
-# or: just docker-up-d
-
-curl "http://localhost:8000/health"
-curl "http://localhost:8000/query?q=neovim+folding"
-```
-
-Data and Hugging Face model cache live in the **`rag-data`** volume (`/data` inside the container). Override the host port with `RAG_BLOG_PORT=8080 docker compose up`.
-
-## API
-
-| Endpoint                          | Description                                   |
-| --------------------------------- | --------------------------------------------- |
-| `GET /health`                     | Liveness check                                |
-| `GET /stats`                      | Chunk count, model name, BM25 vocabulary size |
-| `GET /query?q=...&top_k=5`        | Hybrid search (JSON)                          |
-| `GET /query/stream?q=...&top_k=5` | Same results as SSE                           |
-
-JSON responses include a `timing` object: `vector_search_ms`, `bm25_search_ms`, `total_ms`, and on `GET /query` also `api_ms` (end-to-end handler time). SSE `meta` events carry the same timing fields.
-
-## Project structure
-
-```
-├── config.py            # Paths, RRF weights (stdlib only)
-├── chunking.py          # Markdown-aware chunker + chunk ids (stdlib only)
-├── scrape_content.py    # Fetch notes/guides from productsway.com → data/content/
-├── rag_pipeline.py      # Ingest, LanceDB, BM25, HybridSearch, create_hybrid_search()
-├── server.py            # FastAPI routes; lazy singleton via get_hybrid()
-├── query.py             # CLI wrapper around the same get_hybrid() engine
-├── AGENTS.md            # Agent-oriented quick reference
-├── Dockerfile           # API image (uv + uvicorn)
-├── docker-compose.yml   # api + optional ingest profile
-├── mise.toml            # mise tools + uv venv auto + tasks (mise run …)
-├── justfile             # install, test, lint, prek, serve, docker
-├── prek.toml            # prek / git hook config (ruff + builtins)
-├── pyproject.toml       # project deps + Ruff + ty config
-├── uv.lock              # locked deps (uv)
-├── requirements.txt     # optional pip fallback
-├── tests/               # Unit tests (chunker; no ML deps required)
-├── DAY1_NOTES.md        # Build notes and trade-offs (7-day AI engineer track)
-├── git_push.py          # Helper to push via GitHub Git Data API
-└── data/                # Generated (see .gitignore)
-    ├── content/
-    ├── chunks/
-    └── lancedb/
-```
-
-## Technical details
-
-| Area           | Choice                                                       |
-| -------------- | ------------------------------------------------------------ |
-| Embeddings     | `sentence-transformers/all-MiniLM-L6-v2`, cosine, normalized |
-| Vector store   | LanceDB table `rag_chunks`                                   |
-| Fusion         | RRF, k=60, 70% vector rank / 30% BM25 rank (`config.py`)     |
-| Chunk identity | Stable ids `doc_slug:chunk_index` in LanceDB and BM25 index    |
-| Corpus (Day 1) | ~51 pages → ~83 chunks (TILs, guides, homepage)              |
-
-Typical latency on CPU (after warm load): vector ~60–90 ms, BM25 ~2–8 ms per query (reported in API/CLI `timing`).
-
 ## Project status
 
-Part of a 7-day AI engineer journey ([Day 1 notes](./DAY1_NOTES.md)).
+Day 1 of a 7-day AI engineer track — details in [DAY1_NOTES.md](./DAY1_NOTES.md).
 
 - [x] Day 1 — Production RAG engine
-- [ ] Day 2 — Advanced agent patterns
-- [ ] Day 3 — MCP server deep dive
-- [ ] Day 4 — Fine-tuning and custom models
-- [ ] Day 5 — AI observability and evaluation
-- [ ] Day 6 — AI product from stack
-- [ ] Day 7 — Open source AI stack
-
-## Architecture decisions
-
-Design rationale is recorded as [ADRs in `doc/adr/`](./doc/adr/README.md) (hybrid search, storage, chunk ids, module layout).
+- [ ] Days 2–7 — agents, MCP, fine-tuning, observability, product, open stack
 
 ## References
 
+- [LanceDB](https://lancedb.github.io/lancedb/) · [Sentence-Transformers](https://www.sbert.net/)
 - [mise](https://mise.jdx.dev/) · [uv](https://docs.astral.sh/uv/) · [Ruff](https://docs.astral.sh/ruff/) · [ty](https://docs.astral.sh/ty/)
-- [LanceDB](https://lancedb.github.io/lancedb/)
-- [Sentence-Transformers](https://www.sbert.net/)
 - [Productsway](https://productsway.com/)
 
 ## Author
@@ -214,7 +121,7 @@ Design rationale is recorded as [ADRs in `doc/adr/`](./doc/adr/README.md) (hybri
 
 - Website: [productsway.com](https://productsway.com/)
 - Twitter: [@jellydn](https://twitter.com/jellydn)
-- GitHub: [@jellydn](https://github.com/jellydn)
+- Github: [@jellydn](https://github.com/jellydn)
 
 ## Show your support
 
@@ -223,3 +130,5 @@ Design rationale is recorded as [ADRs in `doc/adr/`](./doc/adr/README.md) (hybri
 [![buymeacoffee](https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/dunghd)
 
 Give a ⭐️ if this project helped you!
+
+[![Stargazers repo roster for @jellydn/rag-blog](https://reporoster.com/stars/jellydn/rag-blog)](https://github.com/jellydn/rag-blog/stargazers)
