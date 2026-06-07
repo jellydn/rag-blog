@@ -1,0 +1,45 @@
+# rag-blog — API + persistent index volume
+# First-time: docker compose --profile ingest run --rm ingest
+# Then:      docker compose up
+
+services:
+  api:
+    build: .
+    image: rag-blog:local
+    ports:
+      - "${RAG_BLOG_PORT:-8000}:8000"
+    environment:
+      RAG_BLOG_DATA: /data
+      HF_HOME: /data/hf-cache
+      TRANSFORMERS_CACHE: /data/hf-cache
+    volumes:
+      - rag-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+  ingest:
+    profiles: ["ingest"]
+    build: .
+    image: rag-blog:local
+    environment:
+      RAG_BLOG_DATA: /data
+      HF_HOME: /data/hf-cache
+      TRANSFORMERS_CACHE: /data/hf-cache
+    volumes:
+      - rag-data:/data
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        python3 scrape_content.py
+        python3 rag_pipeline.py
+        echo "Ingest complete. Start API: docker compose up -d api"
+
+volumes:
+  rag-data:

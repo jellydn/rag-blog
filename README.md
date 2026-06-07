@@ -93,6 +93,27 @@ python query.py --json "neovim folding"
 
 If hybrid search fails with a missing BM25 file, run ingest again so `data/lancedb/bm25_data.json` is created (or updated after chunk-id changes).
 
+### Docker
+
+```bash
+# Build image
+docker compose build
+# or: just docker-build
+
+# First time: scrape + embed into a named volume
+docker compose --profile ingest run --rm ingest
+# or: just docker-ingest
+
+# Run API (http://localhost:8000)
+docker compose up -d
+# or: just docker-up-d
+
+curl "http://localhost:8000/health"
+curl "http://localhost:8000/query?q=neovim+folding"
+```
+
+Data and Hugging Face model cache live in the **`rag-data`** volume (`/data` inside the container). Override the host port with `RAG_BLOG_PORT=8080 docker compose up`.
+
 ## API
 
 | Endpoint                          | Description                                   |
@@ -113,7 +134,9 @@ JSON responses include a `timing` object: `vector_search_ms`, `bm25_search_ms`, 
 ├── rag_pipeline.py      # Ingest, LanceDB, BM25, HybridSearch, create_hybrid_search()
 ├── server.py            # FastAPI routes; lazy singleton via get_hybrid()
 ├── query.py             # CLI wrapper around the same get_hybrid() engine
-├── justfile             # install, test, lint, prek, serve
+├── Dockerfile           # API image (uvicorn)
+├── docker-compose.yml   # api + optional ingest profile
+├── justfile             # install, test, lint, prek, serve, docker
 ├── prek.toml            # prek / git hook config (ruff + builtins)
 ├── pyproject.toml       # Ruff settings
 ├── requirements.txt     # Python dependencies

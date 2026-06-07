@@ -45,3 +45,29 @@ pipeline:
 # API server
 serve:
     python3 server.py
+
+# ── Docker ───────────────────────────────────────────────────────────────
+
+# Build image
+docker-build:
+    docker compose build
+
+# Scrape + ingest into compose volume (first run)
+docker-ingest:
+    docker compose --profile ingest run --rm ingest
+
+# Run API in foreground
+docker-up:
+    docker compose up
+
+# Run API detached
+docker-up-d:
+    docker compose up -d
+
+# Stop API
+docker-down:
+    docker compose down
+
+# Tail API logs
+docker-logs:
+    docker compose logs -f api
