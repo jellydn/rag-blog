@@ -5,7 +5,6 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Dict, List
 
 import lancedb
 import numpy as np
@@ -38,7 +37,7 @@ def chunk_record_to_meta(c: dict) -> dict:
     }
 
 
-def build_chunk_meta(chunks: List[dict]) -> Dict[str, dict]:
+def build_chunk_meta(chunks: list[dict]) -> dict[str, dict]:
     return {c["id"]: chunk_record_to_meta(c) for c in chunks}
 
 
@@ -92,10 +91,10 @@ class Embedder:
         self.dimension = self.model.get_sentence_embedding_dimension()
         print(f"  Model loaded in {time.time() - t0:.1f}s (dim={self.dimension})")
 
-    def embed(self, texts: List[str]) -> np.ndarray:
+    def embed(self, texts: list[str]) -> np.ndarray:
         return self.model.encode(texts, show_progress_bar=True, normalize_embeddings=True)
 
-    def embed_one(self, text: str) -> List[float]:
+    def embed_one(self, text: str) -> list[float]:
         return self.model.encode([text], normalize_embeddings=True)[0].tolist()
 
 
@@ -105,19 +104,19 @@ class BM25Index:
         self.b = b
         self.delta = delta
         self.doc_freqs: dict = {}
-        self.chunk_meta: Dict[str, dict] = {}
-        self.doc_lengths: List[int] = []
-        self.doc_texts: List[str] = []
-        self.doc_ids: List[str] = []
-        self._doc_tokens: List[List[str]] = []
+        self.chunk_meta: dict[str, dict] = {}
+        self.doc_lengths: list[int] = []
+        self.doc_texts: list[str] = []
+        self.doc_ids: list[str] = []
+        self._doc_tokens: list[list[str]] = []
         self.avg_doc_length: float = 0
         self.total_docs: int = 0
         self._built = False
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         return re.findall(r"\b[a-zA-Z][a-zA-Z0-9#]{1,50}\b", text.lower())
 
-    def add_documents(self, doc_ids: List[str], texts: List[str]):
+    def add_documents(self, doc_ids: list[str], texts: list[str]):
         self.doc_ids = doc_ids
         self.doc_texts = texts
         self._doc_tokens = [self._tokenize(t) for t in texts]
@@ -133,7 +132,7 @@ class BM25Index:
         self._built = True
         print(f"  BM25 index built: {self.total_docs} docs, {len(term_to_df)} unique terms")
 
-    def search(self, query: str, top_k: int = 10) -> List[dict]:
+    def search(self, query: str, top_k: int = 10) -> list[dict]:
         if not self._built:
             return []
 
@@ -214,20 +213,22 @@ class VectorStore:
     def _create_table(self):
         import pyarrow as pa
 
-        schema = pa.schema([
-            pa.field("id", pa.string()),
-            pa.field("doc_id", pa.string()),
-            pa.field("title", pa.string()),
-            pa.field("content", pa.string()),
-            pa.field("source_url", pa.string()),
-            pa.field("category", pa.string()),
-            pa.field("chunk_index", pa.int32()),
-            pa.field("total_chunks", pa.int32()),
-            pa.field("vector", pa.list_(pa.float32(), self.dimension)),
-        ])
+        schema = pa.schema(
+            [
+                pa.field("id", pa.string()),
+                pa.field("doc_id", pa.string()),
+                pa.field("title", pa.string()),
+                pa.field("content", pa.string()),
+                pa.field("source_url", pa.string()),
+                pa.field("category", pa.string()),
+                pa.field("chunk_index", pa.int32()),
+                pa.field("total_chunks", pa.int32()),
+                pa.field("vector", pa.list_(pa.float32(), self.dimension)),
+            ]
+        )
         self.table = self.db.create_table(self.TABLE_NAME, schema=schema, mode="overwrite")
 
-    def ingest(self, chunks: List[dict], embedder: Embedder):
+    def ingest(self, chunks: list[dict], embedder: Embedder):
         if not chunks:
             print("  No chunks to ingest")
             return
@@ -239,26 +240,26 @@ class VectorStore:
 
         import pyarrow as pa
 
-        batch = pa.table({
-            "id": [c["id"] for c in chunks],
-            "doc_id": [c["doc_id"] for c in chunks],
-            "title": [c["title"] for c in chunks],
-            "content": [c["content"] for c in chunks],
-            "source_url": [c["source_url"] for c in chunks],
-            "category": [c["category"] for c in chunks],
-            "chunk_index": [c["chunk_index"] for c in chunks],
-            "total_chunks": [c["total_chunks"] for c in chunks],
-            "vector": [emb.tolist() for emb in embeddings],
-        })
+        batch = pa.table(
+            {
+                "id": [c["id"] for c in chunks],
+                "doc_id": [c["doc_id"] for c in chunks],
+                "title": [c["title"] for c in chunks],
+                "content": [c["content"] for c in chunks],
+                "source_url": [c["source_url"] for c in chunks],
+                "category": [c["category"] for c in chunks],
+                "chunk_index": [c["chunk_index"] for c in chunks],
+                "total_chunks": [c["total_chunks"] for c in chunks],
+                "vector": [emb.tolist() for emb in embeddings],
+            }
+        )
         self.table.add(batch)
         print(f"  Ingested {len(chunks)} chunks → {self.table.count_rows()} total")
 
-    def vector_search(self, query_vector: List[float], top_k: int = 10) -> List[dict]:
+    def vector_search(self, query_vector: list[float], top_k: int = 10) -> list[dict]:
         if self.table is None:
             return []
-        results = (
-            self.table.search(query_vector).metric("cosine").limit(top_k).to_list()
-        )
+        results = self.table.search(query_vector).metric("cosine").limit(top_k).to_list()
         return [
             {
                 "id": r["id"],
@@ -309,7 +310,7 @@ class HybridSearch:
         self.vector_weight = vector_weight
         self.bm25_weight = bm25_weight
 
-    def search(self, query: str, top_k: int = 5) -> tuple[List[dict], dict]:
+    def search(self, query: str, top_k: int = 5) -> tuple[list[dict], dict]:
         t0 = time.time()
         query_vec = self.embedder.embed_one(query)
         vec_results = self.vector_store.vector_search(query_vec, top_k=top_k * 2)
@@ -319,7 +320,7 @@ class HybridSearch:
         bm25_results = self.bm25.search(query, top_k=top_k * 2)
         t_bm25 = time.time() - t1
 
-        scores: Dict[str, dict] = {}
+        scores: dict[str, dict] = {}
         for rank, r in enumerate(vec_results):
             cid = r["id"]
             scores[cid] = {
@@ -345,9 +346,7 @@ class HybridSearch:
                     boost,
                 )
 
-        results = sorted(scores.values(), key=lambda x: x["rrf_score"], reverse=True)[
-            :top_k
-        ]
+        results = sorted(scores.values(), key=lambda x: x["rrf_score"], reverse=True)[:top_k]
         timing = {
             "vector_search_ms": round(t_vec * 1000, 1),
             "bm25_search_ms": round(t_bm25 * 1000, 1),
@@ -363,7 +362,7 @@ def create_hybrid_search() -> HybridSearch:
     return HybridSearch(vector_store, bm25, embedder)
 
 
-def load_documents() -> List[Document]:
+def load_documents() -> list[Document]:
     docs = []
     for filepath in sorted(CONTENT_DIR.glob("*.md")):
         content = filepath.read_text(encoding="utf-8").strip()
@@ -398,7 +397,7 @@ def run_ingestion():
 
     docs = load_documents()
     chunker = MarkdownChunker()
-    all_chunks: List[dict] = []
+    all_chunks: list[dict] = []
     for doc in docs:
         all_chunks.extend(chunker.chunk(doc))
     print(f"Generated {len(all_chunks)} chunks from {len(docs)} documents")

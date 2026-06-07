@@ -1,0 +1,41 @@
+# rag-blog — prek (https://prek.j178.dev)
+#:schema https://www.schemastore.org/prek.json
+
+[[repos]]
+repo = "builtin"
+hooks = [
+    { id = "trailing-whitespace" },
+    { id = "end-of-file-fixer" },
+    { id = "check-added-large-files" },
+    { id = "check-yaml" },
+    { id = "check-toml" },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+    {
+        id = "ruff-check",
+        name = "Ruff lint",
+        entry = "ruff check .",
+        language = "system",
+        pass_filenames = false,
+        types = ["python"],
+    },
+    {
+        id = "ruff-format",
+        name = "Ruff format",
+        entry = "ruff format --check .",
+        language = "system",
+        pass_filenames = false,
+        types = ["python"],
+    },
+    {
+        id = "unittest",
+        name = "Unit tests (chunker)",
+        entry = "python3 -m unittest discover -s tests -v",
+        language = "system",
+        pass_filenames = false,
+        stages = ["manual", "pre-push"],
+    },
+]

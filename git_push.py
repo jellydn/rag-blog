@@ -54,10 +54,14 @@ def main():
         with open(f"/opt/data/rag-blog/{fname}", "rb") as f:
             content = f.read()
         b64 = base64.b64encode(content).decode()
-        result = api("POST", "/git/blobs", {
-            "content": b64,
-            "encoding": "base64",
-        })
+        result = api(
+            "POST",
+            "/git/blobs",
+            {
+                "content": b64,
+                "encoding": "base64",
+            },
+        )
         blob_shas[fname] = result["sha"]
         print(f"  {fname} → {result['sha'][:12]}...")
 
@@ -78,49 +82,69 @@ def main():
 
     # 3. Create commit
     print("Creating commit...")
-    commit = api("POST", "/git/commits", {
-        "message": "Day 1: Production RAG engine for Productsway",
-        "tree": tree_sha,
-        "parents": [],
-    })
+    commit = api(
+        "POST",
+        "/git/commits",
+        {
+            "message": "Day 1: Production RAG engine for Productsway",
+            "tree": tree_sha,
+            "parents": [],
+        },
+    )
     commit_sha = commit["sha"]
     print(f"  Commit: {commit_sha[:12]}...")
 
     # 4. Create main branch
     print("Creating main branch...")
-    api("POST", "/git/refs", {
-        "ref": "refs/heads/main",
-        "sha": commit_sha,
-    })
+    api(
+        "POST",
+        "/git/refs",
+        {
+            "ref": "refs/heads/main",
+            "sha": commit_sha,
+        },
+    )
     print("  ✅ main branch created")
 
     # 5. Create day-1 branch for the PR
     print("Creating day-1 branch...")
-    api("POST", "/git/refs", {
-        "ref": "refs/heads/day-1",
-        "sha": commit_sha,
-    })
+    api(
+        "POST",
+        "/git/refs",
+        {
+            "ref": "refs/heads/day-1",
+            "sha": commit_sha,
+        },
+    )
     print("  ✅ day-1 branch created")
 
     # 6. Create draft PR
     print("Creating draft PR...")
     with open("/opt/data/rag-blog/DAY1_NOTES.md", encoding="utf-8") as f:
         pr_body = f.read()
-    pr = api("POST", "/pulls", {
-        "title": "Day 1: Production RAG Systems",
-        "head": "day-1",
-        "base": "main",
-        "body": pr_body,
-        "draft": True,
-    })
+    pr = api(
+        "POST",
+        "/pulls",
+        {
+            "title": "Day 1: Production RAG Systems",
+            "head": "day-1",
+            "base": "main",
+            "body": pr_body,
+            "draft": True,
+        },
+    )
     print(f"\n🎉 PR created: {pr['html_url']}")
 
     # 7. Configure repo defaults
-    api("PATCH", "", {
-        "default_branch": "main",
-        "has_issues": True,
-        "has_projects": True,
-    })
+    api(
+        "PATCH",
+        "",
+        {
+            "default_branch": "main",
+            "has_issues": True,
+            "has_projects": True,
+        },
+    )
     print("  Repo configured ✓")
 
 

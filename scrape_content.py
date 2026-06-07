@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from html.parser import HTMLParser
+
 from config import CONTENT_DIR, ensure_data_dirs
 
 ensure_data_dirs()
@@ -47,7 +48,10 @@ NOTE_SLUGS = [
     ("til-16-revert-to-1st-commit-with-git-command", "TIL"),
     ("truffle-cli-exec-with-arguments", "Guide"),
     ("new-web-app-cli", "Guide"),
-    ("til-13-how-to-fix-refusing-to-allow-an-oauth-app-to-create-or-update-workflow-without-workflow-scope", "TIL"),
+    (
+        "til-13-how-to-fix-refusing-to-allow-an-oauth-app-to-create-or-update-workflow-without-workflow-scope",
+        "TIL",
+    ),
     ("react-hook-use-wait-for-transaction-hash", "Guide"),
     ("til-11-mac-osx-open-file-from-anywhere", "TIL"),
     ("til-12-fix-the-ssh-issue-with-droplet-on-digital-ocean", "TIL"),
@@ -67,6 +71,7 @@ NOTE_SLUGS = [
 
 class ContentExtractor(HTMLParser):
     """Simple HTML content extractor that captures text and code blocks."""
+
     def __init__(self):
         super().__init__()
         self.text_parts = []
@@ -137,48 +142,42 @@ def extract_main_content(html):
     """Extract the main article content from the HTML page."""
     # Try to find the content inside Next.js data structures or main tag
     extractor = ContentExtractor()
-    
+
     # Look for article/main content
-    main_match = re.search(
-        r'<main[^>]*>(.*?)</main>',
-        html, re.DOTALL
-    )
+    main_match = re.search(r"<main[^>]*>(.*?)</main>", html, re.DOTALL)
     if main_match:
         main_html = main_match.group(1)
         # Remove sidebar/nav elements
-        main_html = re.sub(r'<nav[^>]*>.*?</nav>', '', main_html, flags=re.DOTALL)
+        main_html = re.sub(r"<nav[^>]*>.*?</nav>", "", main_html, flags=re.DOTALL)
         extractor.feed(main_html)
         text = extractor.get_text()
         if len(text) > 100:
             return text
-    
+
     # Fallback: try to find article content
-    article_match = re.search(
-        r'<article[^>]*>(.*?)</article>',
-        html, re.DOTALL
-    )
+    article_match = re.search(r"<article[^>]*>(.*?)</article>", html, re.DOTALL)
     if article_match:
         extractor = ContentExtractor()
         extractor.feed(article_match.group(1))
         text = extractor.get_text()
         if len(text) > 100:
             return text
-    
+
     # Last resort: extract everything
-    body_match = re.search(r'<body[^>]*>(.*?)</body>', html, re.DOTALL)
+    body_match = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL)
     if body_match:
         extractor.feed(body_match.group(1))
         text = extractor.get_text()
         # Filter to reasonable length
-        lines = [l for l in text.split('\n') if len(l) > 2]
-        return '\n'.join(lines[:200])
-    
+        lines = [line for line in text.split("\n") if len(line) > 2]
+        return "\n".join(lines[:200])
+
     return extractor.get_text()
 
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
+
     # Also fetch the homepage for the about section
     print("Fetching homepage...")
     html = fetch_page("https://productsway.com/")
@@ -187,32 +186,32 @@ def main():
         with open(f"{OUTPUT_DIR}/homepage.md", "w", encoding="utf-8") as f:
             f.write(f"# About Dung Huynh Duc\n\n{text}")
         print(f"  Saved homepage ({len(text)} chars)")
-    
+
     # Fetch each note
-    for slug, note_type in NOTE_SLUGS:
+    for slug, _note_type in NOTE_SLUGS:
         url = f"https://productsway.com/notes/{slug}"
         filepath = f"{OUTPUT_DIR}/{slug}.md"
-        
+
         if os.path.exists(filepath):
             size = os.path.getsize(filepath)
             if size > 200:
                 print(f"  Skipping (exists): {slug} ({size} bytes)")
                 continue
-        
+
         print(f"  Fetching: {slug}...")
         html = fetch_page(url)
         if not html:
             continue
-        
+
         text = extract_main_content(html)
         if not text or len(text) < 50:
             print(f"    Too short ({len(text) if text else 0} chars), skipping")
             continue
-        
+
         # Prepend title
         title = slug.replace("-", " ").title()
         content = f"# {title}\n\n{text}"
-        
+
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
         print(f"    Saved ({len(content)} chars)")

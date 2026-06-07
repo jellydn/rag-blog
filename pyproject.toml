@@ -1,0 +1,18 @@
+[project]
+name = "rag-blog"
+version = "0.1.0"
+description = "Hybrid RAG for productsway.com"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"git_push.py" = ["B008"]

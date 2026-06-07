@@ -53,10 +53,19 @@ export RAG_BLOG_DATA=/opt/data/rag-blog/data
 
 Generated artifacts (gitignored): `data/content/`, `data/chunks/`, `data/lancedb/` (includes `bm25_data.json` after ingest).
 
-### Tests
+### Tests and quality
 
 ```bash
+# chunker unit tests (stdlib only)
 python -m unittest discover -s tests -v
+
+# or with just (https://github.com/casey/just)
+just install
+just check
+
+# pre-commit hooks via prek
+prek install
+prek run --all-files
 ```
 
 ## Usage
@@ -104,6 +113,9 @@ JSON responses include a `timing` object: `vector_search_ms`, `bm25_search_ms`, 
 ├── rag_pipeline.py      # Ingest, LanceDB, BM25, HybridSearch, create_hybrid_search()
 ├── server.py            # FastAPI routes; lazy singleton via get_hybrid()
 ├── query.py             # CLI wrapper around the same get_hybrid() engine
+├── justfile             # install, test, lint, prek, serve
+├── prek.toml            # prek / git hook config (ruff + builtins)
+├── pyproject.toml       # Ruff settings
 ├── requirements.txt     # Python dependencies
 ├── tests/               # Unit tests (chunker; no ML deps required)
 ├── DAY1_NOTES.md        # Build notes and trade-offs (7-day AI engineer track)
@@ -163,4 +175,3 @@ Design rationale is recorded as [ADRs in `doc/adr/`](./doc/adr/README.md) (hybri
 [![buymeacoffee](https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/dunghd)
 
 Give a ⭐️ if this project helped you!
-

@@ -49,4 +49,3 @@ A fully functional RAG engine that indexes my blog content (productsway.com) and
 
 ---
 _This PR is part of the 7-day AI Engineer journey._
-

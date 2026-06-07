@@ -2,7 +2,6 @@
 
 import re
 from dataclasses import dataclass, field
-from typing import List
 
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
@@ -28,7 +27,7 @@ class Document:
     content: str
     source_url: str
     category: str
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 class MarkdownChunker:
@@ -43,7 +42,7 @@ class MarkdownChunker:
     SECTION_HEADING_RE = re.compile(r"^##+\s+", re.MULTILINE)
     CODE_BLOCK_RE = re.compile(r"^```", re.MULTILINE)
 
-    def chunk(self, doc: Document) -> List[dict]:
+    def chunk(self, doc: Document) -> list[dict]:
         raw = doc.content
         chunks_raw = self._split_by_headings(raw)
 
@@ -57,11 +56,7 @@ class MarkdownChunker:
         total = len(kept)
         for i, chunk_text in enumerate(kept):
             first_line = chunk_text.split("\n")[0]
-            sub_title = (
-                first_line.lstrip("#").strip()
-                if first_line.startswith("#")
-                else doc.title
-            )
+            sub_title = first_line.lstrip("#").strip() if first_line.startswith("#") else doc.title
             row = {
                 "title": sub_title,
                 "content": chunk_text,
@@ -76,16 +71,14 @@ class MarkdownChunker:
 
         return result
 
-    def _split_by_headings(self, text: str) -> List[str]:
+    def _split_by_headings(self, text: str) -> list[str]:
         code_blocks = [m.span() for m in self.CODE_BLOCK_RE.finditer(text)]
 
         def is_in_code_block(pos: int) -> bool:
             return sum(1 for start, end in code_blocks if start < pos) % 2 == 1
 
         heading_matches = [
-            m
-            for m in self.SECTION_HEADING_RE.finditer(text)
-            if not is_in_code_block(m.start())
+            m for m in self.SECTION_HEADING_RE.finditer(text) if not is_in_code_block(m.start())
         ]
 
         if not heading_matches:
@@ -94,11 +87,7 @@ class MarkdownChunker:
         sections = []
         for i, match in enumerate(heading_matches):
             start = match.start()
-            end = (
-                heading_matches[i + 1].start()
-                if i + 1 < len(heading_matches)
-                else len(text)
-            )
+            end = heading_matches[i + 1].start() if i + 1 < len(heading_matches) else len(text)
             section = text[start:end].strip()
             if section:
                 if len(section) > CHUNK_SIZE * 1.5:
@@ -113,7 +102,7 @@ class MarkdownChunker:
 
         return sections if sections else [text]
 
-    def _split_by_size(self, text: str) -> List[str]:
+    def _split_by_size(self, text: str) -> list[str]:
         chunks = []
         lines = text.split("\n")
         current = []
