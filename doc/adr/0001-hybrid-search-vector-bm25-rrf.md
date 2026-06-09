@@ -31,3 +31,7 @@ Fuse ranked lists with **Reciprocal Rank Fusion (RRF)**, k=60, weights **70% vec
 
 - Two indexes must stay aligned on chunk set and identity (see ADR-0003).
 - Heavier query path than single-mode search; BM25 rebuild is O(docs × query terms) without further optimization beyond token caching.
+
+## References
+
+- Embedding model and dimensions: [references.md](./references.md) (Sentence Transformers / `all-MiniLM-L6-v2`).

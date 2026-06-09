@@ -36,7 +36,7 @@ uv sync
 
 With `mise activate` in your shell, entering the repo auto-activates `.venv` when `uv.lock` is present.
 
-Data defaults to `./data` (override with `RAG_BLOG_DATA`). See [Architecture decisions](./doc/adr/README.md).
+Data defaults to `./data` (override with `RAG_BLOG_DATA`). See [Architecture decisions](./doc/adr/README.md) and [Context7 references](./doc/adr/references.md).
 
 ## Usage
 
