@@ -9,23 +9,16 @@ name: Publish learning materials
 # -> Source: "GitHub Actions". Without this, actions/deploy-pages will
 # fail with a permissions error.
 
-# Allowlist of directories that may contain HTML files for the static site.
-# Anchored so the path filter below and the "Check no new HTML directories
-# appeared" smoke step share one source of truth. To add a new content
-# directory, add it here AND mirror it in the ALLOWED regex in the smoke
-# step below.
-html-content-dirs: &html-content-dirs
-  - "lessons/**"
-  - "reference/**"
-  - "learning-records/**"
-
 on:
   push:
     branches: [main, master, day-2]
     paths:
-      # HTML content dirs -- keep aligned with the html-content-dirs anchor.
-      - *html-content-dirs
-      # Build infra
+      # HTML content dirs (lessons, reference, learning-records) and the
+      # build infra (scripts, .github/workflows). Keep the smoke step's
+      # ALLOWED regex below in sync with the HTML content dirs.
+      - "lessons/**"
+      - "reference/**"
+      - "learning-records/**"
       - "scripts/**"
       - ".github/workflows/**"
   workflow_dispatch:
@@ -56,8 +49,9 @@ jobs:
       - name: Check no new HTML directories appeared
         run: |
           set -euo pipefail
-          # Mirrors the html-content-dirs anchor at the top of this file.
-          # If you add a new HTML directory, update BOTH.
+          # Mirrors the on.push.paths HTML content dirs above
+          # (lessons, reference, learning-records). If you add a new
+          # HTML directory, update BOTH the path filter and this regex.
           ALLOWED='^(lessons|reference|learning-records)/'
           # Strip the leading "./" that `find .` adds so the ALLOWED regex
           # matches the relative path. Use `sed` (not `find -printf %P`)
@@ -74,7 +68,7 @@ jobs:
             | grep -vE "$ALLOWED" || true)
           if [ -n "$UNLISTED" ]; then
             echo "::error::Found HTML file(s) outside the content allowlist. \
-          Update the html-content-dirs anchor and the ALLOWED regex in this step."
+          Update the on.push.paths HTML content dirs and the ALLOWED regex in this step."
             echo "$UNLISTED"
             exit 1
           fi
