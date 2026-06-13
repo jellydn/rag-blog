@@ -21,9 +21,12 @@ test:
     uv run python -m unittest discover -s tests -v
 
 # CSS lint (balanced @media blocks, body.index print present,
-# no inline <style>/style= in source HTML). Stdlib-only.
+# no inline <style>/style= in source HTML). Stdlib-only. Uses
+# `uv run` for interpreter consistency with the other recipes
+# (test, lint, fmt) so a stale system Python can't silently
+# produce different results from the managed venv.
 css-lint:
-    python scripts/css_lint.py
+    uv run python scripts/css_lint.py
 
 # Ruff lint
 lint:

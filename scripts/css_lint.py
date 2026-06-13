@@ -160,9 +160,16 @@ def check_theme_css() -> list[str]:
     # the index needs its own block because the global rules lose to
     # body.index at specificity 0,0,1 vs 0,1,1. Derives the print
     # blocks from all_media_blocks (no need for a second regex).
+    #
+    # Strip CSS comments from each block before checking -- a comment
+    # that mentions the selectors (e.g. "/* body.index .page rules */")
+    # would otherwise falsely satisfy the check. The block-extraction
+    # regex matches balanced braces but doesn't strip comments.
     print_blocks = [b for b in all_media_blocks if "print" in b]
     has_index_print = any(
-        "body.index" in block and "body.index .page" in block for block in print_blocks
+        "body.index" in block_no_comments and "body.index .page" in block_no_comments
+        for block in print_blocks
+        for block_no_comments in [re.sub(r"/\*.*?\*/", "", block, flags=re.DOTALL)]
     )
     if not has_index_print:
         errors.append(

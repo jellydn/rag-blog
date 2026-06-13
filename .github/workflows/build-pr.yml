@@ -24,7 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
+        # Don't persist the GITHUB_TOKEN in the local git config --
+        # this workflow is a read-only smoke check, never pushes
+        # back. Persisting the token widens the blast radius if
+        # any step in the job is compromised (same hardening as
+        # publish.yml).
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
