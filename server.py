@@ -3,6 +3,7 @@
 
 import json
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,13 @@ from pydantic import BaseModel
 from agentic import AgentOrchestrator
 from config import MODEL_NAME
 from rag_pipeline import HybridSearch, create_hybrid_search
+
+# Bounds for the top_k query parameter. With multi-pass retrieval
+# (primary + 2 secondary), top_k=N triggers ~3*N embeddings + 3*N
+# vector + 3*N BM25 ops. Capping at 20 prevents abuse / accidental
+# amplification (a single request can't pin the CPU for minutes).
+TOP_K_MIN = 1
+TOP_K_MAX = 20
 
 app = FastAPI(
     title="Productsway RAG API",
@@ -30,9 +38,26 @@ _hybrid = None
 _agent = None
 
 
+# Path to the BM25 index file. Used by the preflight check in
+# get_hybrid() to surface a clear operational error if the index
+# is missing, instead of letting the request fail deep inside the
+# retrieval pipeline with a confusing traceback.
+_BM25_INDEX_PATH = Path("data/lancedb/bm25_data.json")
+
+
 def get_hybrid() -> HybridSearch:
     global _hybrid
     if _hybrid is None:
+        # Preflight: surface a clear operational error if the BM25
+        # index file is missing (e.g. because the user hasn't run
+        # `uv run python rag_pipeline.py` to build the index yet).
+        # Without this check, the failure happens deep inside the
+        # retrieval pipeline with a confusing FileNotFoundError.
+        if not _BM25_INDEX_PATH.exists():
+            raise FileNotFoundError(
+                f"BM25 index not found at {_BM25_INDEX_PATH}. "
+                "Build it with: uv run python rag_pipeline.py"
+            )
         _hybrid = create_hybrid_search()
     return _hybrid
 
@@ -105,7 +130,12 @@ def query(
 @app.get("/agent/query", response_model=AgentResult)
 def agent_query(
     q: str = Query(..., description="Search query"),
-    top_k: int = Query(5, description="Number of results"),
+    top_k: int = Query(
+        5,
+        ge=TOP_K_MIN,
+        le=TOP_K_MAX,
+        description=f"Number of results (1..{TOP_K_MAX})",
+    ),
 ):
     t0 = time.time()
     agent = get_agent()
@@ -139,7 +169,12 @@ def query_stream(
 @app.get("/agent/query/stream")
 def agent_query_stream(
     q: str = Query(..., description="Search query"),
-    top_k: int = Query(5, description="Number of results"),
+    top_k: int = Query(
+        5,
+        ge=TOP_K_MIN,
+        le=TOP_K_MAX,
+        description=f"Number of results (1..{TOP_K_MAX})",
+    ),
 ):
     agent = get_agent()
 

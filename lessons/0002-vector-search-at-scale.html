@@ -135,7 +135,7 @@ table.create_index(
 table.create_index(
     "vector",
     config=IvfHnswSq(
-        num_partitions=256,        # ≈ rows // 1,048,576
+        num_partitions=256,        # ≈ rows // 4,096
         m=16,                      # HNSW degree
         ef_construction=150,
         metric="l2",               # SQ builds on L2, then we project
@@ -218,7 +218,7 @@ def build_scaled_table(n: int) -> lancedb.table.Table:
     rng = np.random.default_rng(seed=42)
     vecs = rng.normal(size=(n, DIM)).astype("float32")
     vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
-    schema = lancedb.db.LanceTable  # placeholder; use the same schema as rag_chunks
+    schema = None  # schema inferred from the data dicts below
     table = db.create_table(
         name,
         data=[

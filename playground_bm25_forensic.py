@@ -27,7 +27,7 @@ with open("data/lancedb/bm25_data.json", encoding="utf-8") as f:
 query = "how to set up neovim folding"
 q_tokens = bm25._tokenize(query)
 print(f"Query:                {query!r}")
-print(f"Query tokens (BM25):  {q_tokens}")
+print("Query tokens (BM25):  " + str(q_tokens))
 print()
 
 # Find the html2pdf chunk 0

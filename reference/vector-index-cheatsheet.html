@@ -70,7 +70,7 @@ table.create_index("vector", config=IvfPq(
 
 # IVF + HNSW + SQ (default recommendation for 100k–10M)
 table.create_index("vector", config=IvfHnswSq(
-    num_partitions=256,    # ~ rows // 1_048_576
+    num_partitions=256,    # ~ rows // 4,096
     m=16,
     ef_construction=150,
     metric="l2",

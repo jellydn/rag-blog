@@ -1,4 +1,12 @@
-"""Unit tests for markdown chunking (no ML deps)."""
+"""Unit tests for markdown chunking + BM25Index.max_tf helper.
+
+Mostly stdlib-only: the chunker tests need nothing beyond `chunking`.
+The `TestBM25MaxTf` class imports `BM25Index` from `rag_pipeline`,
+which transitively loads the sentence-transformers model. Run the
+full suite with `uv run python -m unittest discover tests` (which
+installs the ML deps via `uv sync`); the chunker tests alone pass
+with just the stdlib.
+"""
 
 import unittest
 

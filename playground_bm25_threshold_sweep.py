@@ -32,7 +32,12 @@ QUERIES = [
 # rename. The Neovim article splits into 2 chunks at our 512-char ceiling;
 # html2pdf is the Lesson 0003 false positive.
 def _chunk_ids(slug: str, n: int) -> set[str]:
-    stem = Path(f"data/content/{slug}.md").stem  # raises FileNotFoundError on drift
+    path = Path(f"data/content/{slug}.md")
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Corpus drift: expected source file at {path}. Did the lesson slug get renamed?"
+        )
+    stem = path.stem
     return {f"{stem}:{i}" for i in range(n)}
 
 
@@ -90,6 +95,11 @@ def main():
             # The relevant quantity for the threshold alone is the BM25-only
             # drops — chunks whose raw BM25 hit fell below the floor.
             bm25_only_drops = {r["doc_id"] for r in raw if r["score"] < thr}
+            # NOTE: bm25_only_drops is a PREDICTED drop set (what the
+            # threshold WOULD cut), not the actual drop set. The actual
+            # drops depend on the full pipeline (which may apply
+            # additional filters, e.g. adaptive suppression). For the
+            # actual count, see timing["bm25_dropped_threshold"].
             target_dropped = bool(TARGET_CHUNKS & bm25_only_drops)
             html2pdf_dropped = HTML2PDF_CHUNK in bm25_only_drops
             target_seen = any((r.get("id") in TARGET_CHUNKS) for r in results)
@@ -101,8 +111,8 @@ def main():
                 f"  thr={thr:>5.1f}  bm25_drop={timing['bm25_dropped_threshold']:>2d}  "
                 f"target_in_top5={'Y' if target_seen else 'N':1s}  "
                 f"html2pdf_in_top5={'Y' if html2pdf_seen else 'N':1s}  "
-                f"target_AXED={'Y' if target_dropped else 'N':1s}  "
-                f"fp_AXED={'Y' if html2pdf_dropped else 'N':1s}  "
+                f"target_WOULD_AXE={'Y' if target_dropped else 'N':1s}  "
+                f"fp_WOULD_AXE={'Y' if html2pdf_dropped else 'N':1s}  "
                 f"top={top_id[:38] if top_id else 'None':38s}  "
                 f"conf={conf:6s} top_cos={top_cos}"
             )
@@ -115,8 +125,8 @@ def main():
                     "bm25_dropped": timing["bm25_dropped_threshold"],
                     "target_in_top5": target_seen,
                     "html2pdf_in_top5": html2pdf_seen,
-                    "target_axed": target_dropped,
-                    "fp_axed": html2pdf_dropped,
+                    "target_would_axe": target_dropped,
+                    "fp_would_axe": html2pdf_dropped,
                     "top_id": top_id,
                     "rrf_top_score": results[0]["rrf_score"] if results else 0.0,
                     "confidence": conf,
@@ -138,8 +148,8 @@ def main():
             f"{row['query']:<18s} {row['threshold']:>5.1f} {row['bm25_dropped']:>4d} "
             f"{'Y' if row['target_in_top5'] else 'N':>3s} "
             f"{'Y' if row['html2pdf_in_top5'] else 'N':>3s} "
-            f"{'Y' if row['target_axed'] else 'N':>4s} "
-            f"{'Y' if row['fp_axed'] else 'N':>4s} "
+            f"{'Y' if row['target_would_axe'] else 'N':>4s} "
+            f"{'Y' if row['fp_would_axe'] else 'N':>4s} "
             f"{row['confidence']:>6s} {row['top_cosine']:>9.4f}  "
             f"{(row['top_id'] or 'None')[:40]}"
         )

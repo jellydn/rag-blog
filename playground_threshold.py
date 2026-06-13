@@ -24,9 +24,15 @@ QUERIES = [
 THRESHOLDS = [0.0, 0.3]
 
 
-def make_hybrid(threshold: float):
-    """Build a fresh HybridSearch with a specific cosine threshold."""
-    embedder = Embedder()
+def make_hybrid(embedder: Embedder, threshold: float):
+    """Build a fresh HybridSearch with a specific cosine threshold.
+
+    Takes the Embedder as a parameter so the caller can build it
+    once and reuse it across (query, threshold) iterations --
+    instantiating Embedder() is expensive (loads the
+    sentence-transformers model) and dominates runtime when
+    called in a loop.
+    """
     vs = VectorStore("data/lancedb", embedder.dimension)
     with open("data/lancedb/bm25_data.json", encoding="utf-8") as f:
         bm25 = BM25Index.from_json_dict(json.load(f))
@@ -52,6 +58,10 @@ print(f"  Default in config.py: {COSINE_THRESHOLD}  (0.0 = off, backward compati
 print("=" * 78)
 
 results_by_query = {}
+# Build the embedder once outside the loop -- it's the expensive part
+# (loads the sentence-transformers model). Reusing it across all
+# (query, threshold) iterations is the whole point of the sweep.
+embedder = Embedder()
 for q in QUERIES:
     print()
     print("─" * 78)
@@ -59,7 +69,7 @@ for q in QUERIES:
     print("─" * 78)
 
     for th in THRESHOLDS:
-        hs = make_hybrid(th)
+        hs = make_hybrid(embedder, th)
         results, timing = hs.search(q, top_k=5)
         results_by_query[(q, th)] = (results, timing)
 
@@ -100,7 +110,6 @@ print("=" * 78)
 print("  (this is the distribution the threshold carves into)")
 import numpy as np  # noqa: E402
 
-embedder = Embedder()
 with open("data/lancedb/bm25_data.json", encoding="utf-8") as f:
     bm25 = BM25Index.from_json_dict(json.load(f))
 contents = bm25.doc_texts

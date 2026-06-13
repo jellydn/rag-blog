@@ -45,6 +45,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Don't persist the GITHUB_TOKEN in the local git config --
+          # this workflow only checks out the repo to build the site
+          # and never pushes back. Persisting the token widens the
+          # blast radius if any step in the job is compromised.
+          persist-credentials: false
 
       - name: Check no new HTML directories appeared
         run: |

@@ -15,7 +15,7 @@ from rag_pipeline import BM25Index, Embedder, VectorStore
 
 print("Loading models + index...")
 embedder = Embedder()
-vstore = VectorStore("data/lancedb", embedder.dimension)
+vstore = VectorStore("data/lancedb", embedder.dimension)  # noqa: F841
 
 with open("data/lancedb/bm25_data.json", encoding="utf-8") as f:
     bm25 = BM25Index.from_json_dict(json.load(f))
