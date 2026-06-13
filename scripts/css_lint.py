@@ -61,6 +61,7 @@ ROOT = Path(__file__).resolve().parent.parent
 THEME_CSS = ROOT / "theme" / "style.css"
 LESSONS_SRC = ROOT / "lessons"
 REFERENCE_SRC = ROOT / "reference"
+SITE = ROOT / "site"
 
 # Matches `<style>` or `<style ...>` (with optional attributes). Uses
 # `[\s>]` (not `>`) so it also catches `<style\n>`. Case-insensitive
@@ -173,22 +174,34 @@ def check_theme_css() -> list[str]:
     return errors
 
 
-def check_no_inline_styles() -> list[str]:
-    """Check source HTML for inline <style> blocks + style= attributes.
+def check_no_inline_styles(
+    dirs: tuple[Path, ...] = (LESSONS_SRC, REFERENCE_SRC),
+) -> list[str]:
+    """Check HTML dirs for inline <style> blocks + style= attributes.
 
-    Walks lessons/*.html and reference/*.html (the source files, not
-    the build output in site/) and reports any file that contains:
+    Walks every ``*.html`` in each dir (recursively -- catches
+    subdirs like ``site/lessons/*.html``) and reports any file
+    that contains:
       * an inline <style> block (should link to ../style.css instead)
       * an inline style="..." or style='...' attribute (bypasses the
         stylesheet, specificity 1,0,0,0 -- hard to override)
 
+    Args:
+      dirs: Tuple of directories to scan. Defaults to the source
+        HTML dirs (lessons/, reference/). Pass ``(SITE,)`` (or
+        include SITE in the tuple) to also scan the build output,
+        catching inline styles introduced directly into site/
+        (e.g. by a future build script change). The function skips
+        any dir that doesn't exist (e.g. site/ before the first
+        build), so it's safe to call unconditionally.
+
     Returns a list of error messages (empty if no violations).
     """
     errors: list[str] = []
-    for src_dir in (LESSONS_SRC, REFERENCE_SRC):
+    for src_dir in dirs:
         if not src_dir.is_dir():
             continue
-        for path in sorted(src_dir.glob("*.html")):
+        for path in sorted(src_dir.rglob("*.html")):
             text = path.read_text(encoding="utf-8")
             rel = path.relative_to(ROOT)
             if INLINE_STYLE_TAG.search(text):
@@ -257,8 +270,13 @@ def check_selector_specificity() -> list[str]:
 
 
 def main() -> int:
+    # Check both the source HTML (lessons/, reference/) and the build
+    # output (site/). A future build script change could introduce
+    # inline styles directly into site/, which the source check would
+    # miss -- scanning both catches the backstop scenario. One call
+    # with all 3 dirs (the function treats them identically).
     theme_errors = check_theme_css()
-    html_errors = check_no_inline_styles()
+    html_errors = check_no_inline_styles((LESSONS_SRC, REFERENCE_SRC, SITE))
     specificity_errors = check_selector_specificity()
     all_errors = theme_errors + html_errors + specificity_errors
 
@@ -279,11 +297,11 @@ def main() -> int:
         f"{len(_AT_MEDIA_BLOCK.findall(THEME_CSS.read_text(encoding='utf-8')))} "
         "@media block(s) balanced, body.index print block present"
     )
-    for src_dir in (LESSONS_SRC, REFERENCE_SRC):
+    for src_dir in (LESSONS_SRC, REFERENCE_SRC, SITE):
         if src_dir.is_dir():
-            n_html = sum(1 for _ in src_dir.glob("*.html"))
+            n_html = sum(1 for _ in src_dir.rglob("*.html"))
             print(
-                f"  - {src_dir.relative_to(ROOT)}/*.html ({n_html} files): "
+                f"  - {src_dir.relative_to(ROOT)}/**/*.html ({n_html} files): "
                 "no inline <style> blocks or style= attributes"
             )
     return 0

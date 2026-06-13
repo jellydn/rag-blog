@@ -17,7 +17,6 @@ SITE_INDEX = ROOT / "site" / "index.html"
 # at top of file) -- the import MUST come after ROOT is defined.
 sys.path.insert(0, str(ROOT / "scripts"))
 from css_lint import (  # noqa: E402
-    INLINE_STYLE_TAG,
     check_no_inline_styles,
     check_theme_css,
 )
@@ -136,23 +135,21 @@ class TestBuildSite(unittest.TestCase):
                 f"{self.build_stderr}"
             )
 
-        # Build-output check: rglob catches every HTML under site/
-        # including any new top-level files someone might add in the
-        # future. Reuses INLINE_STYLE_TAG from the CSS lint so the
-        # test and the lint share the same regex (single source of
-        # truth -- eliminates the last regex-duplication between
-        # the test and the lint).
-        site_dir = ROOT / "site"
-        html_files = sorted(site_dir.rglob("*.html"))
-        inline_style_files = []
-        for p in html_files:
-            text = p.read_text(encoding="utf-8")
-            if INLINE_STYLE_TAG.search(text):
-                inline_style_files.append(str(p.relative_to(ROOT)))
+        # Build-output check: delegate to the CSS lint (single source
+        # of truth -- the test and the lint use the same regexes +
+        # iteration logic). Catches both <style> blocks AND style="..."
+        # attributes -- the backstop for someone who introduces inline
+        # styles directly into site/ (e.g. by a future build script
+        # change). Produces specific error messages from the lint
+        # (e.g. "site/lessons/0001-...html contains an inline
+        # style='...' attribute") instead of a generic test-side
+        # message.
+        build_output_errors = check_no_inline_styles((ROOT / "site",))
         self.assertEqual(
-            inline_style_files,
+            build_output_errors,
             [],
-            f"build output contains inline <style> blocks: {inline_style_files}",
+            "build output contains inline <style> blocks or style= attributes: "
+            f"{build_output_errors}",
         )
 
     def test_theme_css_is_copied_to_site(self):
