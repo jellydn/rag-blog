@@ -354,3 +354,12 @@ body.index footer {
   body.index .page { padding: 32px 18px; }
   body.index h1 { font-size: 26px; }
 }
+
+@media print {
+  /* Re-applies the global @media print rules at body.index specificity
+   * so the index renders correctly when printed or saved as PDF.
+   * The global rules (body, .page) have specificity 0,0,1 which loses
+   * to body.index / body.index .page at 0,1,1. */
+  body.index { font-size: 11pt; }
+  body.index .page { max-width: none; padding: 24px; }
+}
