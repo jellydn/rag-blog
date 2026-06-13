@@ -62,7 +62,7 @@ for idx in sample_indices:
 
     # Top 5 (excluding self at rank 0 with score ~1.0)
     top = np.argsort(sims)[::-1]
-    print(f"  Top 5 (excluding self):")
+    print("  Top 5 (excluding self):")
     shown = 0
     for j in top:
         if j == idx:

@@ -379,7 +379,8 @@ class HybridSearch:
             else:
                 before = len(vec_results)
                 vec_results = [
-                    r for r in vec_results
+                    r
+                    for r in vec_results
                     if (1 - float(r.get("score", 0))) >= self.cosine_threshold
                 ]
                 vec_dropped = before - len(vec_results)
@@ -406,8 +407,7 @@ class HybridSearch:
             else:
                 before = len(bm25_results)
                 bm25_results = [
-                    r for r in bm25_results
-                    if float(r.get("score", 0)) >= self.bm25_threshold
+                    r for r in bm25_results if float(r.get("score", 0)) >= self.bm25_threshold
                 ]
                 bm25_dropped = before - len(bm25_results)
         t_bm25 = time.time() - t1

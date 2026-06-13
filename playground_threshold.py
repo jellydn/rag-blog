@@ -10,8 +10,8 @@ contribution to its RRF score), but it loses the 0.7*w boost from cosine.
 """
 import json
 
-from rag_pipeline import BM25Index, Embedder, VectorStore
 from config import COSINE_THRESHOLD
+from rag_pipeline import BM25Index, Embedder, VectorStore
 
 QUERIES = [
     "how to set up neovim folding",
@@ -77,26 +77,26 @@ for q in QUERIES:
     dropped = [c for c in ids0 if c not in ids1]
     promoted = [c for c in ids1 if c not in ids0]
     print()
-    print(f"  DIFF (0.0 → 0.3):")
+    print("  DIFF (0.0 → 0.3):")
     if dropped:
         print(f"    dropped from top-5: {dropped}")
     else:
-        print(f"    dropped from top-5: (none)")
+        print("    dropped from top-5: (none)")
     if promoted:
         print(f"    promoted into top-5: {promoted}")
     else:
-        print(f"    promoted into top-5: (none)")
+        print("    promoted into top-5: (none)")
     if not dropped and not promoted:
-        print(f"    → identical top-5. Threshold had no effect on this query.")
+        print("    → identical top-5. Threshold had no effect on this query.")
     else:
-        print(f"    → top-5 changed.")
+        print("    → top-5 changed.")
 
 print()
 print("=" * 78)
 print("Per-query score-stats on the underlying cosine distribution")
 print("=" * 78)
 print("  (this is the distribution the threshold carves into)")
-import numpy as np
+import numpy as np  # noqa: E402
 
 embedder = Embedder()
 with open("data/lancedb/bm25_data.json", encoding="utf-8") as f:

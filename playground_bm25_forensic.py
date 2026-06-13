@@ -65,7 +65,7 @@ for qt in q_tokens:
 
 print("-" * 70)
 print(f"{'SUM':10s} {'':>4s} {'':>5s} {'':>7s} {total_score:>14.4f}")
-print(f"\nReported score in playground_realdb.py: ~7.49")
+print("\nReported score in playground_realdb.py: ~7.49")
 print(f"Decomposed score here:                  {total_score:.4f}")
 print()
 

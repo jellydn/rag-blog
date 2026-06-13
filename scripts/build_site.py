@@ -39,7 +39,7 @@ def extract_meta(html: str) -> tuple[str, str]:
     paragraph in the document if no ``<h1>`` is present.
     """
     title_match = re.search(r"<title>(.*?)</title>", html, re.DOTALL)
-    title = (title_match.group(1).strip() if title_match else "Untitled")
+    title = title_match.group(1).strip() if title_match else "Untitled"
 
     # First <p> after the h1 (works for both lesson and reference layouts)
     h1_end = html.find("</h1>")
@@ -57,9 +57,10 @@ def extract_meta(html: str) -> tuple[str, str]:
 
 def build_index(lessons: list[dict], refs: list[dict]) -> str:
     """Render the navigation page as a self-contained HTML string."""
+
     def render_cards(items: list[dict], subdir: str) -> str:
         if not items:
-            return "<p class=\"empty\">No files yet.</p>"
+            return '<p class="empty">No files yet.</p>'
         rows = []
         for item in items:
             desc = item["desc"] or "(no description)"

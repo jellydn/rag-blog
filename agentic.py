@@ -228,7 +228,12 @@ class RetrievalAgent:
         merged: dict[str, dict[str, Any]] = {}
         for results in results_sets:
             for rank, item in enumerate(results):
-                key = str(item.get("id") or item.get("doc_id") or item.get("source_url") or f"chunk-{rank}")
+                key = str(
+                    item.get("id")
+                    or item.get("doc_id")
+                    or item.get("source_url")
+                    or f"chunk-{rank}"
+                )
                 if key not in merged:
                     merged[key] = dict(item)
                     merged[key]["_evidence_queries"] = []
@@ -244,7 +249,9 @@ class RetrievalAgent:
         out.sort(key=lambda r: (r.get("rrf_score", 0), r.get("vector_score", 0)), reverse=True)
         return out
 
-    def retrieve(self, plan: QueryPlan, top_k: int = 5) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    def retrieve(
+        self, plan: QueryPlan, top_k: int = 5
+    ) -> tuple[list[dict[str, Any]], dict[str, float]]:
         timings: dict[str, float] = {}
         result_sets: list[list[dict[str, Any]]] = []
 
@@ -271,7 +278,9 @@ class RetrievalAgent:
 class ReflectionAgent:
     """Checks retrieval coverage and proposes follow-up queries."""
 
-    def reflect(self, query: str, route: RouteResult, plan: QueryPlan, results: list[dict[str, Any]]) -> ReflectionResult:
+    def reflect(
+        self, query: str, route: RouteResult, plan: QueryPlan, results: list[dict[str, Any]]
+    ) -> ReflectionResult:
         q_tokens = {t for t in query.lower().split() if len(t) > 2}
         if not q_tokens:
             q_tokens = set(query.lower().split())
@@ -301,8 +310,14 @@ class ReflectionAgent:
             gaps.append("Top hit is weak on code/command similarity")
             follow_ups.append(f"{query} command example")
 
-        recommendation = "Use the top result directly." if confidence >= 0.65 else (
-            "Broaden the query and inspect the second-best hit." if results else "Try a different keyword set."
+        recommendation = (
+            "Use the top result directly."
+            if confidence >= 0.65
+            else (
+                "Broaden the query and inspect the second-best hit."
+                if results
+                else "Try a different keyword set."
+            )
         )
 
         return ReflectionResult(
@@ -329,7 +344,14 @@ class AgentOrchestrator:
         results, timings = self.retriever.retrieve(plan, top_k=top_k)
         reflection = self.reflector.reflect(query, route, plan, results)
         answer = self._compose_answer(query, route, plan, results, reflection, timings)
-        return AgentRun(query=query, route=route, plan=plan, results=results, reflection=reflection, answer=answer)
+        return AgentRun(
+            query=query,
+            route=route,
+            plan=plan,
+            results=results,
+            reflection=reflection,
+            answer=answer,
+        )
 
     @staticmethod
     def _compose_answer(

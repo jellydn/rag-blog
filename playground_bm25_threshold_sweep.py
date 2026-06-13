@@ -26,6 +26,7 @@ QUERIES = [
     ("Q4_adversarial", "best pizza in naples italy"),
 ]
 
+
 # Derive chunk IDs from filenames so the script fails loudly (FileNotFoundError)
 # on corpus drift instead of silently reporting "target_in_top5=N" for a slug
 # rename. The Neovim article splits into 2 chunks at our 512-char ceiling;
@@ -81,13 +82,10 @@ def main():
         # outcome is just "what got cut". This lets us attribute every drop
         # to a specific chunk id and see if TARGET / HTML2PDF were axed.
         raw = h.bm25.search(q, top_k=20)
-        raw_ids = {r["doc_id"] for r in raw}
         for thr in THRESHOLDS:
             h.bm25_threshold = float(thr)
             results, timing = h.search(q, top_k=5)
-            kept_ids = {r.get("id") for r in results if r.get("id")}
-            dropped_ids = {r["doc_id"] for r in raw if r["doc_id"] not in kept_ids}
-            # But careful: the search() pipeline also folds in vector hits,
+            # Note: the search() pipeline also folds in vector hits,
             # so a chunk can survive in the RRF list even if BM25 dropped it.
             # The relevant quantity for the threshold alone is the BM25-only
             # drops — chunks whose raw BM25 hit fell below the floor.
@@ -110,19 +108,21 @@ def main():
             )
             for line in render_top5(results, f"top-5 at thr={thr}"):
                 print(line)
-            summary_rows.append({
-                "query": q_label,
-                "threshold": thr,
-                "bm25_dropped": timing["bm25_dropped_threshold"],
-                "target_in_top5": target_seen,
-                "html2pdf_in_top5": html2pdf_seen,
-                "target_axed": target_dropped,
-                "fp_axed": html2pdf_dropped,
-                "top_id": top_id,
-                "rrf_top_score": results[0]["rrf_score"] if results else 0.0,
-                "confidence": conf,
-                "top_cosine": top_cos,
-            })
+            summary_rows.append(
+                {
+                    "query": q_label,
+                    "threshold": thr,
+                    "bm25_dropped": timing["bm25_dropped_threshold"],
+                    "target_in_top5": target_seen,
+                    "html2pdf_in_top5": html2pdf_seen,
+                    "target_axed": target_dropped,
+                    "fp_axed": html2pdf_dropped,
+                    "top_id": top_id,
+                    "rrf_top_score": results[0]["rrf_score"] if results else 0.0,
+                    "confidence": conf,
+                    "top_cosine": top_cos,
+                }
+            )
 
     # Final aggregate: for each (query, threshold), one row.
     print("\n" + "=" * 72)

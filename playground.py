@@ -3,6 +3,7 @@
 Run: uv run python playground.py
 """
 import numpy as np
+
 from rag_pipeline import Embedder
 
 embedder = Embedder()

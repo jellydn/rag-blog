@@ -10,9 +10,8 @@ For three queries, this script:
 The TARGET is the Neovim-folding article. We expect it to be #1 in cosine
 and #1 in BM25 for query 1, and progressively harder for queries 2 and 3.
 """
-import json
 
-from rag_pipeline import BM25Index, Embedder, HybridSearch, VectorStore, create_hybrid_search
+from rag_pipeline import create_hybrid_search
 
 TARGET_ID = "til-40-how-to-set-up-folding-in-neovim:0"
 
@@ -108,7 +107,7 @@ for q in QUERIES:
         match = "✓ matches" if delta < 1e-4 else f"✗ MISMATCH (delta={delta})"
         print(f"\n  By-hand RRF {rrf_total:.6f}  vs  HybridSearch RRF {actual:.6f}  →  {match}")
     else:
-        print(f"\n  TARGET not in final top-5 for this query.")
+        print("\n  TARGET not in final top-5 for this query.")
 
     # ---- 5. Verdict -------------------------------------------------------
     print()

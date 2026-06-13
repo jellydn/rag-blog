@@ -89,11 +89,13 @@ class TestBM25MaxTf(unittest.TestCase):
 
     def test_max_tf_returns_highest_occurrence_count(self):
         # 'neovim' appears 1x in doc0, 3x in doc1, 2x in doc2 -> max = 3
-        bm25 = self._make_index([
-            "neovim is cool",
-            "neovim neovim neovim folding",
-            "two neovim mentions here",
-        ])
+        bm25 = self._make_index(
+            [
+                "neovim is cool",
+                "neovim neovim neovim folding",
+                "two neovim mentions here",
+            ]
+        )
         self.assertEqual(bm25.max_tf("neovim"), 3)
 
     def test_max_tf_handles_empty_index(self):

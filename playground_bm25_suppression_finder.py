@@ -61,7 +61,7 @@ def main():
     print("Improved suppression finder — pre-screen by df, focus on stopwords")
     print("=" * 78)
     print(f"  MIN_DF = {MIN_DF}  (tokens below this are skipped — they give IDF > 0.5)")
-    print(f"  Default floor BM25_THRESHOLD = 1.0; will retry at 0.5 if no winners")
+    print("  Default floor BM25_THRESHOLD = 1.0; will retry at 0.5 if no winners")
     print()
 
     h = create_hybrid_search()
@@ -122,7 +122,7 @@ def main():
         return top_bm25, n_hits, fires, timing, max_tf
 
     # Phase 1: single stopwords at floor=1.0
-    print(f"--- Phase 1: single stopwords at BM25_THRESHOLD=1.0 ---")
+    print("--- Phase 1: single stopwords at BM25_THRESHOLD=1.0 ---")
     print(f"  (skipping tokens with df < {MIN_DF})")
     print()
     print(f"{'token':<14s} {'df':>4s}  {'top_bm25':>9s}  {'max_tf':>6s}  {'#hits':>5s}  {'fires?':>6s}")
@@ -140,7 +140,7 @@ def main():
 
     # Phase 2: 2-token stopwords at floor=1.0
     print()
-    print(f"--- Phase 2: 2-token stopword phrases at BM25_THRESHOLD=1.0 ---")
+    print("--- Phase 2: 2-token stopword phrases at BM25_THRESHOLD=1.0 ---")
     print()
     print(f"{'phrase':<24s} {'df':>16s}  {'top_bm25':>9s}  {'max_tf':>6s}  {'#hits':>5s}  {'fires?':>6s}")
     print("-" * 80)
@@ -196,7 +196,7 @@ def main():
             # Show the top-5 RRF result
             h.bm25_threshold = 1.0
             results, _ = h.search(q, top_k=5)
-            print(f"  Top-5 RRF results:")
+            print("  Top-5 RRF results:")
             for i, r in enumerate(results, 1):
                 print(
                     f"    {i}. {r.get('id', r.get('doc_id', '?'))[:50]:50s}  "
