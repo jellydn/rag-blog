@@ -88,6 +88,74 @@ class TestBuildSite(unittest.TestCase):
                 f"no reference card link contains fragment {needle!r}: {titles}",
             )
 
+    def _build_succeeded(self) -> bool:
+        # Precondition shared by the post-build assertions below: if the
+        # build itself failed, the rendered site/ is unreliable (possibly
+        # missing or stale) and any check against it would be a false
+        # positive.
+        return self.build_returncode == 0 and self.build_stderr == ""
+
+    def test_no_inline_style_blocks(self):
+        # Guards the CSS-extraction refactor: every page (index, lessons,
+        # references) must link to the shared stylesheet instead of
+        # inlining rules. A regression that reintroduces an inline
+        # <style> in any of these files would cause a silent style drift
+        # that the browser would render without raising an error -- this
+        # test catches it at build time.
+        if not self._build_succeeded():
+            self.fail(
+                f"build did not succeed (exit {self.build_returncode}); "
+                f"cannot check for inline <style> blocks: {self.build_stderr}"
+            )
+
+        # site/ is the build output, not the source -- the source HTML
+        # files in lessons/ and reference/ MAY contain inline <style>
+        # before the build (they don't anymore, but the test is for the
+        # build output). rglob catches every HTML under site/ including
+        # any new top-level files someone might add in the future.
+        site_dir = ROOT / "site"
+        html_files = sorted(site_dir.rglob("*.html"))
+        inline_style_files = []
+        for p in html_files:
+            text = p.read_text(encoding="utf-8")
+            if "<style>" in text or "<style " in text:
+                inline_style_files.append(str(p.relative_to(ROOT)))
+        self.assertEqual(
+            inline_style_files,
+            [],
+            "the following HTML files contain an inline <style> block "
+            "(should link to the shared stylesheet instead): "
+            f"{inline_style_files}",
+        )
+
+    def test_theme_css_is_copied_to_site(self):
+        # Guards the build script's copy step: theme/style.css is the
+        # hand-maintained source of truth; site/style.css is what gets
+        # deployed. If the copy step ever breaks (file renamed, the
+        # THEME_SRC constant removed, the copy skipped in a refactor),
+        # the deployed site will silently fall back to whatever stale
+        # CSS was there before.
+        if not self._build_succeeded():
+            self.fail(
+                f"build did not succeed (exit {self.build_returncode}); "
+                f"cannot check theme/site CSS parity: {self.build_stderr}"
+            )
+
+        theme_css = ROOT / "theme" / "style.css"
+        site_css = ROOT / "site" / "style.css"
+        self.assertTrue(theme_css.exists(), f"missing source: {theme_css}")
+        self.assertTrue(site_css.exists(), f"missing build output: {site_css}")
+        # Bytes comparison (not text) because shutil.copy2 preserves
+        # the file bytes exactly; a text comparison could fail on
+        # encoding normalization even when the files are functionally
+        # identical.
+        self.assertEqual(
+            theme_css.read_bytes(),
+            site_css.read_bytes(),
+            f"{theme_css.relative_to(ROOT)} and {site_css.relative_to(ROOT)} "
+            "differ after the build (the copy step is broken or stale)",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
