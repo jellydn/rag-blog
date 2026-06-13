@@ -6,7 +6,7 @@ Scans ``lessons/*.html`` and ``reference/*.html`` and produces:
   - ``site/lessons/``    — copies of the lesson HTML files
   - ``site/reference/``  — copies of the reference HTML files
   - ``site/style.css``   — copied from ``theme/style.css`` (hand-maintained
-    shared stylesheet for the lessons + references)
+    shared stylesheet for the index, lessons, and references)
 
 The output is consumed by the ``publish.yml`` GitHub Actions workflow
 and deployed to GitHub Pages. The script is stdlib-only so it can run
@@ -81,58 +81,9 @@ def build_index(lessons: list[dict], refs: list[dict]) -> str:
 <head>
 <meta charset="UTF-8">
 <title>Learning Materials — RAG, AI, LLMs</title>
-<style>
-  :root {{
-    --ink: #1a1a1a; --ink-soft: #555; --paper: #fbfaf7;
-    --accent: #b8541b; --accent-soft: #f4e1d2; --rule: #d8d2c1;
-  }}
-  * {{ box-sizing: border-box; }}
-  body {{
-    margin: 0; padding: 0; background: var(--paper); color: var(--ink);
-    font-family: "Charter", "Iowan Old Style", "Georgia", serif;
-    font-size: 16px; line-height: 1.55;
-    -webkit-font-smoothing: antialiased;
-  }}
-  .page {{ max-width: 800px; margin: 0 auto; padding: 48px 28px 64px; }}
-  h1 {{
-    font-size: 32px; margin: 0 0 8px; letter-spacing: -0.01em;
-    border-bottom: 2px solid var(--accent); padding-bottom: 8px;
-  }}
-  h2 {{
-    font-size: 20px; margin: 36px 0 12px; color: var(--accent);
-  }}
-  .meta {{ color: var(--ink-soft); font-size: 14px; margin: 0 0 24px; }}
-  ul {{ list-style: none; padding: 0; margin: 0; }}
-  li {{
-    background: #fff; border: 1px solid var(--rule); border-radius: 6px;
-    padding: 14px 18px; margin: 10px 0;
-    transition: border-color 120ms ease, transform 120ms ease;
-  }}
-  li:hover {{
-    border-color: var(--accent);
-    transform: translateY(-1px);
-  }}
-  a {{
-    color: var(--ink); text-decoration: none; font-weight: 600;
-    font-size: 17px;
-  }}
-  a:hover {{ color: var(--accent); }}
-  .desc {{
-    color: var(--ink-soft); font-size: 14px; margin-top: 4px;
-    line-height: 1.45;
-  }}
-  .empty {{ color: var(--ink-soft); font-style: italic; }}
-  footer {{
-    margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule);
-    color: var(--ink-soft); font-size: 13px;
-  }}
-  @media (max-width: 600px) {{
-    .page {{ padding: 32px 18px; }}
-    h1 {{ font-size: 26px; }}
-  }}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="index">
 <main class="page">
 <h1>Learning Materials</h1>
 <p class="meta">
