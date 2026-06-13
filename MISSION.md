@@ -44,3 +44,7 @@ Every lesson should be tied back to a concrete artifact in the `rag-blog` codeba
 ## Time Horizon
 
 7 days of structured learning (matching the project). Realistic pace: 1 lesson per concept, ~30–60 minutes each, with a hands-on exercise that I actually run in the repo.
+
+## Progress
+
+A running log of where I am in the 7-day track. **Day 1** — hybrid search (vector + BM25, fused with RRF); built `rag_pipeline.py` and benchmarked the threshold. **Day 2** — deterministic agent layer (`agentic.py`) and the learning-materials site (this repo). **Days 3–7** — LLM basics, RAG theory, evaluation, and agent design at depth. Lessons go in `lessons/`; reference cheat sheets distill the formulas and parameter tables I want to recall cold.
