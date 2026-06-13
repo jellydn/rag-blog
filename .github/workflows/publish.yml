@@ -1,0 +1,63 @@
+name: Publish learning materials
+
+# Triggers:
+#   - push to any of the main branches when a published dir, the build
+#     script, or this workflow changes (no deploys on doc-only commits)
+#   - manual dispatch from the Actions tab (for ad-hoc previews)
+#
+# IMPORTANT first-time setup: Settings -> Pages -> Build and deployment
+# -> Source: "GitHub Actions". Without this, actions/deploy-pages will
+# fail with a permissions error.
+on:
+  push:
+    branches: [main, master, day-2]
+    paths:
+      - "lessons/**"
+      - "reference/**"
+      - "learning-records/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+# Allow the deploy-pages action to write to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time — never cancel an in-progress deploy
+# (avoid leaving Pages in a half-updated state).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & deploy site
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build site
+        run: python scripts/build_site.py
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
