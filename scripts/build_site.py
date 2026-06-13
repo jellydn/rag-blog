@@ -78,7 +78,7 @@ def build_index(lessons: list[dict], refs: list[dict]) -> str:
     # Counts go in the meta line below the page title. Kept as a
     # variable so the f-string below is pure structure (the only
     # interpolations left are the card lists).
-    counts = f"{len(lessons)} lessons · {len(refs)} reference cheat sheets."
+    meta_counts = f"{len(lessons)} lessons · {len(refs)} reference cheat sheets."
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -92,7 +92,7 @@ def build_index(lessons: list[dict], refs: list[dict]) -> str:
 <h1>Learning Materials</h1>
 <p class="meta">
   RAG, AI, and LLM concepts — taught as a senior engineer with no ML background.
-  {counts}
+  {meta_counts}
 </p>
 
 <h2>Lessons</h2>

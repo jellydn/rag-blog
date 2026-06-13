@@ -79,19 +79,17 @@ INLINE_STYLE_ATTR = re.compile(r"""style\s*=\s*['"]""", re.IGNORECASE)
 # `(?:[^{}]|\{[^{}]*\})*` handles one level of nesting.
 #
 # Print-specific blocks are derived from this regex (filter for
-# blocks containing the word `print` in the header) -- one regex
-# covers both the balanced-block check and the print-block check.
+# blocks containing the word `print`) -- one regex covers both
+# the balanced-block check and the print-block check.
 _AT_MEDIA_BLOCK = re.compile(
     r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}",
 )
 
-# Public API: the check functions + the main entry point + the
-# regex constants other modules might import. Underscore-prefixed
-# names (the @media block regexes) are internal implementation
-# details and not part of the public API.
+# Public API: the check functions + the main entry point. The
+# INLINE_STYLE_TAG / INLINE_STYLE_ATTR constants + the
+# underscore-prefixed @media block regexes are internal
+# implementation details, not part of the public API.
 __all__ = [
-    "INLINE_STYLE_TAG",
-    "INLINE_STYLE_ATTR",
     "check_theme_css",
     "check_no_inline_styles",
     "check_selector_specificity",
