@@ -187,7 +187,6 @@ def main() -> int:
     (SITE / "lessons").mkdir(parents=True)
     (SITE / "reference").mkdir(parents=True)
     # Copy the hand-maintained site stylesheet into the build output.
-    THEME_SRC = ROOT / "theme"
     shutil.copy2(THEME_SRC / "style.css", SITE / "style.css")
 
     lessons = collect(LESSONS_SRC)
