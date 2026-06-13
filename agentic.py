@@ -13,6 +13,9 @@ This module is intentionally LLM-free so it can run locally and deterministicall
 
 from __future__ import annotations
 
+import re
+import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
@@ -172,8 +175,14 @@ class PlannerAgent:
                 "Reflect on whether the top hits contain executable instructions",
             ]
         elif route.intent == Intent.COMPARE:
-            primary = q.replace(" vs ", " comparison ")
-            secondary = [q.replace(" vs ", " between "), f"{q} difference"]
+            # Case-insensitive rewrite -- catches " vs ", " VS ", " Vs " etc.
+            # so a query like "PostgreSQL VS MySQL" is handled the same as
+            # "PostgreSQL vs MySQL".
+            primary = re.sub(r" vs ", " comparison ", q, flags=re.IGNORECASE)
+            secondary = [
+                re.sub(r" vs ", " between ", q, flags=re.IGNORECASE),
+                f"{q} difference",
+            ]
             strategy = "dual_path_compare"
             steps = [
                 "Retrieve both sides of the comparison",
@@ -255,18 +264,18 @@ class RetrievalAgent:
         timings: dict[str, float] = {}
         result_sets: list[list[dict[str, Any]]] = []
 
-        t0 = __import__("time").time()
+        t0 = time.time()
         primary_results, timing = self.hybrid.search(plan.primary_query, top_k=top_k)
-        timings["primary_ms"] = round((__import__("time").time() - t0) * 1000, 1)
+        timings["primary_ms"] = round((time.time() - t0) * 1000, 1)
         timings.update({f"primary_{k}": v for k, v in timing.items()})
         for r in primary_results:
             r["_query"] = plan.primary_query
         result_sets.append(primary_results)
 
         for idx, q in enumerate(plan.secondary_queries[:2], start=1):
-            t1 = __import__("time").time()
+            t1 = time.time()
             secondary_results, _ = self.hybrid.search(q, top_k=max(3, top_k // 2))
-            timings[f"secondary_{idx}_ms"] = round((__import__("time").time() - t1) * 1000, 1)
+            timings[f"secondary_{idx}_ms"] = round((time.time() - t1) * 1000, 1)
             for r in secondary_results:
                 r["_query"] = q
             result_sets.append(secondary_results)
@@ -338,12 +347,92 @@ class AgentOrchestrator:
         self.retriever = RetrievalAgent(hybrid)
         self.reflector = ReflectionAgent()
 
-    def run(self, query: str, top_k: int = 5) -> AgentRun:
+    def _orchestrate(self, query: str, top_k: int):
+        """Internal: yields intermediate results as the agent runs.
+
+        Yield format: ``(kind, value)`` where ``kind`` is one of
+        ``"route"``, ``"plan"``, ``"result"``, ``"reflection"``, ``"answer"``.
+
+        Single source of truth for the orchestration order. Both
+        ``run()`` (sync, returns AgentRun) and ``stream()`` (sync
+        generator, yields SSE events) consume this generator so
+        they cannot drift apart.
+        """
         route = self.router.route(query)
+        yield ("route", route)
         plan = self.planner.build_plan(query, route)
+        yield ("plan", plan)
         results, timings = self.retriever.retrieve(plan, top_k=top_k)
+        for r in results:
+            yield ("result", r)
         reflection = self.reflector.reflect(query, route, plan, results)
+        yield ("reflection", reflection)
         answer = self._compose_answer(query, route, plan, results, reflection, timings)
+        yield ("answer", answer)
+
+    def stream(self, query: str, top_k: int = 5) -> Iterator[dict[str, Any]]:
+        """Yield SSE-friendly events as the agent runs.
+
+        Consumes ``_orchestrate()`` and converts each intermediate
+        result to a dict ready for ``json.dumps``. The HTTP client
+        sees events as they're produced (route, plan, result x N,
+        reflection, answer) -- the actual server endpoint
+        (``GET /agent/query/stream``) consumes this generator and
+        yields SSE messages between each event.
+
+        Each yielded event is ``{"type": <kind>, ...}`` where
+        ``<kind>`` matches the orchestrator tuple kind.
+        """
+        result_idx = 0
+        for kind, value in self._orchestrate(query, top_k):
+            if kind == "route":
+                yield {
+                    "type": "route",
+                    "route": asdict(value) | {"intent": value.intent.value},
+                }
+            elif kind == "plan":
+                yield {
+                    "type": "plan",
+                    "plan": asdict(value) | {"intent": value.intent.value},
+                }
+            elif kind == "result":
+                result_idx += 1
+                yield {"type": "result", "index": result_idx, **value}
+            elif kind == "reflection":
+                yield {"type": "reflection", "reflection": asdict(value)}
+            elif kind == "answer":
+                yield {"type": "answer", "answer": value}
+
+    def run(self, query: str, top_k: int = 5) -> AgentRun:
+        """Run the agent synchronously, returning the final AgentRun.
+
+        Consumes ``_orchestrate()`` and assembles the AgentRun from
+        the intermediate results. Behavior is identical to the
+        pre-refactor inline implementation; the refactor just routes
+        the orchestration through the shared generator so ``run()``
+        and ``stream()`` cannot drift apart.
+        """
+        route: RouteResult | None = None
+        plan: QueryPlan | None = None
+        results: list[dict[str, Any]] = []
+        reflection: ReflectionResult | None = None
+        answer: str = ""
+
+        for kind, value in self._orchestrate(query, top_k):
+            if kind == "route":
+                route = value
+            elif kind == "plan":
+                plan = value
+            elif kind == "result":
+                results.append(value)
+            elif kind == "reflection":
+                reflection = value
+            elif kind == "answer":
+                answer = value
+
+        # The generator always yields all 5 event kinds, so the
+        # assertions document the invariant.
+        assert route is not None and plan is not None and reflection is not None
         return AgentRun(
             query=query,
             route=route,

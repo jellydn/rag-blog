@@ -142,15 +142,16 @@ def agent_query_stream(
     top_k: int = Query(5, description="Number of results"),
 ):
     agent = get_agent()
-    run = agent.run(q, top_k=top_k)
-    payload = agent.to_dict(run)
 
-    async def event_stream():
-        yield f"data: {json.dumps({'type': 'route', 'route': payload['route'], 'plan': payload['plan']})}\n\n"
-        for i, r in enumerate(payload["results"]):
-            yield f"data: {json.dumps({'type': 'result', 'index': i + 1, **r})}\n\n"
-        yield f"data: {json.dumps({'type': 'reflection', 'reflection': payload['reflection']})}\n\n"
-        yield f"data: {json.dumps({'type': 'answer', 'answer': payload['answer']})}\n\n"
+    def event_stream():
+        # Consume the agent's stream() generator and yield SSE
+        # messages as events are produced. The sync generator runs
+        # in FastAPI's threadpool; the SSE response is delivered
+        # progressively to the client (not buffered until the full
+        # agent run completes). Yields a final 'done' event for
+        # client-side completion detection.
+        for event in agent.stream(q, top_k=top_k):
+            yield f"data: {json.dumps(event)}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
