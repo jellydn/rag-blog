@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lesson 0002 — Vector Search at Scale</title>
+<style>
+  :root {
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --paper: #fbfaf7;
+    --accent: #b8541b;
+    --accent-soft: #f4e1d2;
+    --code-bg: #f4f1ea;
+    --rule: #e5e0d4;
+    --hl: #fff3a3;
+    --ok: #2e7d32;
+    --warn: #b8541b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--paper); color: var(--ink);
+    font-family: "Charter", "Iowan Old Style", "Georgia", "Times New Roman", serif;
+    font-size: 17px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 760px; margin: 0 auto; padding: 64px 32px 96px; }
+  header.lesson-meta {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 24px; margin-bottom: 32px;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 12px; color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+  header.lesson-meta .tag {
+    display: inline-block;
+    background: var(--accent-soft); color: var(--accent);
+    padding: 2px 8px; border-radius: 3px; margin-right: 8px;
+    text-transform: uppercase;
+  }
+  h1 { font-size: 36px; line-height: 1.2; margin: 0 0 12px; letter-spacing: -0.01em; }
+  h2 { font-size: 22px; margin: 48px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); font-weight: 600; }
+  p { margin: 14px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 6px 0; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+  a:hover { border-bottom-color: var(--accent); }
+  code { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 14.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); border: 1px solid var(--rule); border-radius: 6px; padding: 16px 18px; overflow-x: auto; font-size: 14px; line-height: 1.55; }
+  pre code { background: none; padding: 0; font-size: 14px; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 14px 18px; margin: 24px 0; border-radius: 0 4px 4px 0; }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Georgia", serif; font-style: italic; background: #f7f3e8; padding: 2px 6px; border-radius: 3px; }
+  .exercise { background: #f0ebde; border: 1px dashed var(--accent); padding: 18px 22px; margin: 32px 0; border-radius: 6px; }
+  .exercise h3 { color: var(--ink); margin-top: 0; }
+  .tag-anchor { font-family: "SF Mono", "Menlo", monospace; font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: 3px; display: inline-block; margin-bottom: 4px; }
+  .file-ref { font-family: "SF Mono", "Menlo", monospace; font-size: 13px; color: var(--ink-soft); }
+  .file-ref strong { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  th { font-weight: 600; color: var(--ink-soft); }
+  .check { color: var(--ok); }
+  .cross { color: var(--warn); }
+  hr { border: none; border-top: 1px solid var(--rule); margin: 48px 0; }
+  .citations { font-size: 14.5px; color: var(--ink-soft); }
+  .citations li { margin: 8px 0; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--rule); font-size: 14px; color: var(--ink-soft); font-style: italic; }
+  @media print { body { font-size: 11pt; } .page { max-width: none; padding: 24px; } pre { font-size: 10pt; } a { color: var(--ink); border-bottom: none; } }
+</style>
+</head>
+<body>
+<main class="page">
+
+<header class="lesson-meta">
+  <span class="tag">Lesson 0002</span>
+  <span>Scale · ~12 min · benchmark exercise</span>
+</header>
+
+<h1>Vector Search at Scale</h1>
+
+<p class="file-ref">Anchored in <strong>rag_pipeline.py</strong> → <code>class VectorStore</code> · <code>vector_search</code></p>
+
+<p>Right now your search code does this:</p>
+
+<pre><code>results = table.search(query_vector).metric("cosine").limit(top_k).to_list()</code></pre>
+
+<p>That's <strong>exact k-NN</strong>: for every query, LanceDB compares your query vector against <em>every single chunk vector</em>, sorts them, and returns the top 5. For 83 chunks, that's fine. For 83,000 — or 8.3 million — it's not. This lesson is about what "not" means in concrete numbers, and the two algorithm families that fix it.</p>
+
+<h2>1. The problem with exact search</h2>
+
+<p>Cosine similarity between two 384-dimensional vectors is ~1,540 floating-point operations (multiplies, adds, one square root at the end). Call it <span class="math">C</span>. To find the top 5 out of <span class="math">N</span> chunks, you do <span class="math">N</span> comparisons and a sort:</p>
+
+<p style="text-align:center;"><span class="math">cost_exact = N · C</span></p>
+
+<p>For our current index, that's <code>83 × 1,540 ≈ 128,000</code> FLOPs per query. On a modern CPU at ~10 GFLOPS, this takes microseconds. The end-to-end latency in `DAY1_NOTES.md` was 60–90 ms, and most of that was the embedding model, not the search.</p>
+
+<p>But scale the dataset up. Here's the same math for the same query:</p>
+
+<table>
+  <tr><th>Chunks (N)</th><th>FLOPs per query</th><th>Time on CPU (theoretical lower bound)</th></tr>
+  <tr><td>83 (today)</td><td>128k</td><td>~13 µs</td></tr>
+  <tr><td>10,000</td><td>15.4M</td><td>~1.5 ms</td></tr>
+  <tr><td>100,000</td><td>154M</td><td>~15 ms</td></tr>
+  <tr><td>1,000,000</td><td>1.54B</td><td>~150 ms</td></tr>
+  <tr><td>10,000,000</td><td>15.4B</td><td>~1.5 s</td></tr>
+</table>
+
+<p>At 1M chunks the per-query cost is starting to hurt. At 10M your single search takes longer than your embedding model took. And you also pay a memory cost: 1M × 384 floats × 4 bytes = 1.5 GB just for the vectors, and LanceDB's table format adds overhead on top.</p>
+
+<div class="callout">
+<p><strong>Engineer-to-engineer framing:</strong> exact k-NN is the "linear scan" of vector search. It works the way you'd expect: O(N) per query, O(N) memory. We accept it at 83 rows because it's small. We will not accept it at 10M rows because the math stops working.</p>
+</div>
+
+<h2>2. ANN: the contract</h2>
+
+<p>ANN — <strong>Approximate Nearest Neighbor</strong> — is a family of algorithms that trade a small, controlled amount of accuracy for a large, controlled speedup. The contract is:</p>
+
+<ul>
+  <li><strong>Recall@10</strong> ≈ 0.95 instead of 1.0 — we accept that 5% of the time the true top-1 isn't in our top-10.</li>
+  <li><strong>Query time</strong> drops from O(N) to roughly O(log N) — milliseconds even at 10M rows.</li>
+  <li><strong>Build time</strong> goes up: you pay a one-time tax when you create the index.</li>
+</ul>
+
+<p>The "approximate" matters because search quality downstream — RAG answer quality — is the product of two things: the retrieval recall and the LLM's ability to ignore noise. If recall drops from 1.0 to 0.95, your RAG will occasionally miss a great answer. You tune the index to keep this in the noise floor. <a href="https://www.pinecone.io/learn/series/faiss/product-quantization/">Pinecone's PQ guide explains the "magic triangle" of recall/speed/memory</a>.</p>
+
+<h2>3. Family 1: HNSW — graph-based</h2>
+
+<p>HNSW stands for <strong>Hierarchical Navigable Small World</strong>. Despite the imposing name, the data structure is just a graph. Each chunk is a node. Edges connect "close" chunks. There are multiple layers — the top layers have few nodes, the bottom layer has all of them.</p>
+
+<p>Searching for the nearest neighbor to a query is like navigating a social network:</p>
+
+<ol>
+  <li>Start at the top layer at a pre-defined entry node.</li>
+  <li>Look at your neighbors. If any is closer to the query than you, jump to it. Repeat until no neighbor is closer. (You've hit a "local minimum.")</li>
+  <li>Drop down to the next layer, at the same node. Repeat the greedy descent.</li>
+  <li>When you hit the bottom layer, you've explored the densest region of the graph and have a high-quality top-k.</li>
+</ol>
+
+<p>It's the same idea as a B-tree — expressways on top, local streets at the bottom — applied to a graph instead of a sorted array. The search is O(log N) because the top layers act as a long-jump scaffold.</p>
+
+<p>Three knobs you'll see in the LanceDB config:</p>
+
+<table>
+  <tr><th>Parameter</th><th>What it controls</th><th>Effect of raising it</th></tr>
+  <tr><td><code>M</code></td><td>Max edges per node (graph degree)</td><td>Better recall, more memory, slower build</td></tr>
+  <tr><td><code>ef_construction</code></td><td>Candidate list size when building the graph</td><td>Better graph quality, slower build</td></tr>
+  <tr><td><code>ef_search</code></td><td>Candidate list size when querying</td><td>Better recall, slower query</td></tr>
+</table>
+
+<p>The official paper is <a href="https://arxiv.org/abs/1603.09320">Malkov &amp; Yashunin, 2016</a>. Pinecone's <a href="https://www.pinecone.io/learn/series/vector-search/hnsw/">HNSW page</a> has a good interactive walkthrough.</p>
+
+<h2>4. Family 2: IVF — partition-based</h2>
+
+<p>IVF stands for <strong>Inverted File Index</strong>. The mental model is a database index: partition the space into <em>clusters</em> and only search the partitions that could plausibly contain the answer.</p>
+
+<p>Build time: run k-means clustering over all the vectors. You choose <code>nlist</code> centroids. Each chunk is assigned to its nearest centroid.</p>
+
+<p>Query time: find the <code>nprobe</code> centroids closest to the query, then only compare against the vectors in those clusters.</p>
+
+<p>Two knobs:</p>
+
+<table>
+  <tr><th>Parameter</th><th>Phase</th><th>Effect of raising it</th></tr>
+  <tr><td><code>nlist</code></td><td>Build</td><td>More, smaller clusters. Faster queries, slower build, risk of empty clusters.</td></tr>
+  <tr><td><code>nprobe</code></td><td>Query</td><td>Search more clusters per query. Better recall, slower queries.</td></tr>
+</table>
+
+<p>The intuition: if you have 1M vectors and <code>nlist=1000</code>, each cluster has ~1,000 vectors. With <code>nprobe=10</code>, you only scan ~10,000 vectors per query — a 100x reduction.</p>
+
+<h2>5. PQ — compression (the secret weapon)</h2>
+
+<p><strong>Product Quantization</strong> solves a different problem: memory. At 1M vectors × 384 dims × 4 bytes, you're holding 1.5 GB of floats in RAM. PQ compresses each vector to ~50–100 bytes — a 30–60× reduction — by splitting the vector into sub-vectors, clustering each sub-vector separately, and replacing every sub-vector with the ID of its nearest centroid.</p>
+
+<p>You don't compare raw vectors at query time; you compare compressed representations via a precomputed lookup table. There's a small accuracy hit, but memory drops to a fraction, and more vectors fit in cache, so the system is often <em>faster</em> despite the quantization step.</p>
+
+<p>Most production systems combine: <strong>IVF + PQ</strong> for memory-bounded scale, or <strong>IVF + HNSW</strong> for latency-bounded scale. The first gives you "billion-scale, slower per query"; the second gives you "fastest possible per query, more memory."</p>
+
+<h2>6. How LanceDB exposes all of this</h2>
+
+<p>Our current code doesn't create an index. LanceDB defaults to <strong>exact k-NN</strong> when there's no index. For 83 rows, that's the right call — building an index would be slower than running the brute-force scan, and the index itself would use more memory than the raw data.</p>
+
+<p>To add an index, you call <code>create_index</code> on the table. The current LanceDB API (v0.33) takes a typed config object:</p>
+
+<p><span class="tag-anchor">rag_pipeline.py · VectorStore._create_table (extended)</span></p>
+<pre><code>from lancedb.pydantic import IvfPq, IvfHnswSq
+
+# 1) IVF + PQ — best when memory is the constraint
+table.create_index(
+    "vector",
+    config=IvfPq(
+        num_partitions=256,        # ≈ rows // 4096
+        num_sub_vectors=96,        # ≈ dim // 8 (for 384-d)
+        metric="cosine",
+    ),
+)
+
+# 2) IVF + HNSW + SQ — best latency/recall balance
+table.create_index(
+    "vector",
+    config=IvfHnswSq(
+        num_partitions=256,        # ≈ rows // 1,048,576
+        m=16,                      # HNSW degree
+        ef_construction=150,
+        metric="l2",               # SQ builds on L2, then we project
+    ),
+)</code></pre>
+
+<p>The full set of supported indexes in LanceDB today: <code>IvfFlat</code>, <code>IvfPq</code>, <code>IvfRq</code>, <code>IvfSq</code>, <code>IvfHnswFlat</code>, <code>IvfHnswPq</code>, <code>IvfHnswSq</code>. The naming convention is <code>IVF_[HNSW_]?</code> + a quantizer (<code>Flat</code> = no compression, <code>PQ</code> = product quantization, <code>SQ</code> = scalar quantization, <code>RQ</code> = RaBitQ). <a href="https://docs.lancedb.com/indexing/vector-index">Full reference →</a></p>
+
+<div class="callout">
+<p><strong>Decision rule of thumb:</strong> for under ~100k vectors and a single-machine setup, <strong>don't create an index</strong> — exact k-NN is faster overall. For 100k–10M, <code>IVF_HNSW_SQ</code> is the default recommendation. For 10M+, <code>IVF_PQ</code> or <code>IVF_RQ</code> to keep memory bounded. <em>Always re-measure recall against exact k-NN before shipping.</em></p>
+</div>
+
+<h2>7. The recall benchmark you should always run</h2>
+
+<p>When you adopt an ANN index, the <strong>first thing to do</strong> is measure how often the ANN top-k matches the exact top-k. This is "recall@k" against the brute-force ground truth.</p>
+
+<p>The pattern:</p>
+
+<pre><code>import numpy as np
+import lancedb
+
+db = lancedb.connect("data/lancedb")
+table = db.open_table("rag_chunks")
+
+# 1) Ground truth via exact k-NN
+gt = (
+    table.search(query_vec)
+    .metric("cosine")
+    .limit(10)
+    .to_list()
+)
+gt_ids = {row["id"] for row in gt}
+
+# 2) Approximate results (after create_index on the vector column)
+ann = table.search(query_vec).limit(10).to_list()
+ann_ids = {row["id"] for row in ann}
+
+# 3) Recall @ 10
+recall = len(gt_ids & ann_ids) / len(gt_ids)
+print(f"recall@10 = {recall:.2f}")</code></pre>
+
+<p>Run this on 50–100 real queries. <code>recall@10 ≥ 0.95</code> is the typical bar. Below 0.9, your RAG answers will start degrading visibly. <strong>You also need to compare against your old exact k-NN behavior</strong> — if 0.95 of the time the answer is the same chunk, no user will notice. If it's 0.70, your whole search will feel flaky.</p>
+
+<h2>8. Hands-on exercise</h2>
+
+<div class="exercise">
+<h3>Benchmark exact vs ANN at increasing scale</h3>
+
+<p>We'll measure the per-query latency of <code>table.search(...).limit(10).to_list()</code> as the dataset grows, then see if creating an index actually helps.</p>
+
+<p>Save as <code>playground_scale.py</code> at the repo root:</p>
+
+<pre><code>"""Lesson 0002 — benchmark exact vs ANN vector search at scale."""
+import time
+import numpy as np
+import lancedb
+from rag_pipeline import Embedder
+
+print("Loading model...")
+embedder = Embedder()
+DIM = embedder.dimension
+
+# ----- 1) Synthesize a scalable dataset by chunking Wikipedia text -----
+# (We don't have 83k real blog chunks; we fake the count by duplicating
+# the existing index with random perturbations of the vectors.)
+print("Connecting to existing index...")
+db = lancedb.connect("data/lancedb")
+existing = db.open_table("rag_chunks")
+real_chunks = existing.to_pandas()
+print(f"  real rows: {len(real_chunks)}")
+
+# Helper: build a "scaled" table with N rows
+def build_scaled_table(n: int) -> lancedb.table.Table:
+    """Create a fresh table with `n` rows of random unit vectors."""
+    name = f"scaled_{n}"
+    try:
+        db.drop_table(name)
+    except Exception:
+        pass
+    rng = np.random.default_rng(seed=42)
+    vecs = rng.normal(size=(n, DIM)).astype("float32")
+    vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
+    schema = lancedb.db.LanceTable  # placeholder; use the same schema as rag_chunks
+    table = db.create_table(
+        name,
+        data=[
+            {
+                "id": f"fake-{i}",
+                "doc_id": "fake",
+                "title": f"fake {i}",
+                "content": f"fake content {i}",
+                "source_url": "",
+                "category": "TIL",
+                "chunk_index": i,
+                "total_chunks": n,
+                "vector": vecs[i].tolist(),
+            }
+            for i in range(n)
+        ],
+    )
+    return table
+
+
+# ----- 2) Benchmark a single query against different sizes -----
+QUERIES = 20
+for n in (1_000, 10_000, 100_000):
+    print(f"\n--- n = {n:,} rows ---")
+    tbl = build_scaled_table(n)
+
+    query_vec = embedder.embed_one("how to configure neovim folding")
+
+    # Warm-up (first call may pay file-open cost)
+    tbl.search(query_vec).metric("cosine").limit(10).to_list()
+
+    # Exact k-NN
+    t0 = time.perf_counter()
+    for _ in range(QUERIES):
+        tbl.search(query_vec).metric("cosine").limit(10).to_list()
+    exact_ms = (time.perf_counter() - t0) / QUERIES * 1000
+    print(f"  exact k-NN:   {exact_ms:7.2f} ms/query")
+
+    # Build an index, then re-benchmark
+    print("  building IVF_HNSW_SQ index...")
+    from lancedb.pydantic import IvfHnswSq
+    tbl.create_index(
+        "vector",
+        config=IvfHnswSq(
+            num_partitions=max(8, n // 4096),
+            m=16,
+            ef_construction=100,
+        ),
+    )
+    t0 = time.perf_counter()
+    for _ in range(QUERIES):
+        tbl.search(query_vec).limit(10).to_list()
+    ann_ms = (time.perf_counter() - t0) / QUERIES * 1000
+    print(f"  IVF_HNSW_SQ:   {ann_ms:7.2f} ms/query  (speedup: {exact_ms / ann_ms:.1f}x)")
+
+    db.drop_table(tbl.name)</code></pre>
+
+<p>Run it: <code>uv run python playground_scale.py</code> (give it 1–2 minutes).</p>
+
+<p><strong>What to look for in the output:</strong></p>
+<ol>
+  <li>At <code>n=1,000</code>, exact is fastest. The index is overhead.</li>
+  <li>At <code>n=10,000</code>, the two should be roughly tied. Recall is what tips the scale.</li>
+  <li>At <code>n=100,000</code>, you should see the ANN index start to win — typically 3–10× speedup.</li>
+  <li>If at any point the speedup is < 1×, your index parameters are wrong for the size. Try raising <code>ef_search</code> or <code>nprobe</code>.</li>
+</ol>
+
+<p><strong>⚠ Memory warning:</strong> generating 100k × 384-d vectors takes ~150 MB of RAM. The script drops the table after each size, so peak memory stays bounded.</p>
+</div>
+
+<h2>9. What you now know</h2>
+
+<ul>
+  <li>✅ Exact k-NN is the default in LanceDB and is O(N) per query. Fine for our 83 chunks. Painful at 10M.</li>
+  <li>✅ ANN trades a small recall loss for a large speedup. The recall loss is what you measure, not assume.</li>
+  <li>✅ HNSW is a graph-based index: O(log N) search, more memory, fast to query, slow to build.</li>
+  <li>✅ IVF is a partition-based index: cluster first, then search only the relevant clusters. Two knobs (<code>nlist</code>, <code>nprobe</code>) control the build/query speed/recall tradeoff.</li>
+  <li>✅ PQ compresses vectors ~30–60×, enabling billion-scale in memory. Often combined with IVF.</li>
+  <li>✅ LanceDB's <code>create_index(... config=IvfHnswSq(...))</code> is the practical API. Under 100k rows, exact k-NN is usually the right choice.</li>
+</ul>
+
+<h2>10. What you don't know yet (next lessons)</h2>
+
+<ul>
+  <li>Why keyword search still matters when you have a perfect vector index (Lesson 0003: BM25).</li>
+  <li>How to fuse vector and keyword rankings (Lesson 0004: RRF).</li>
+  <li>How to add metadata filters without breaking the vector index (filtering with LanceDB <code>where</code> clauses).</li>
+</ul>
+
+<hr>
+
+<div class="callout">
+<p><strong>🧠 Ask follow-up questions.</strong> Want to try a different index, see the recall calculation in code, or discuss when HNSW beats IVF in our specific case? Tell me where to dig next.</p>
+</div>
+
+<h2>Citations &amp; further reading</h2>
+<ol class="citations">
+  <li><a href="https://docs.lancedb.com/indexing/vector-index">LanceDB Vector Index documentation</a> — the canonical reference for index types and config objects.</li>
+  <li>Malkov &amp; Yashunin, <a href="https://arxiv.org/abs/1603.09320"><em>Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs</em></a> (2016) — the HNSW paper.</li>
+  <li>Pinecone, <a href="https://www.pinecone.io/learn/series/vector-search/hnsw/"><em>HNSW explained</em></a> — interactive walkthrough of the graph algorithm.</li>
+  <li>Pinecone, <a href="https://www.pinecone.io/learn/series/faiss/product-quantization/"><em>Product Quantization explained</em></a> — the "magic triangle" framing for recall/speed/memory.</li>
+  <li>FAISS wiki, <a href="https://github.com/facebookresearch/faiss/wiki/Getting-started"><em>Getting started</em></a> — the reference implementation; great for understanding operational constraints.</li>
+  <li>Milvus, <a href="https://milvus.io/docs/ivf-pq.md"><em>IVF_PQ documentation</em></a> — implementation-level parameter guidance.</li>
+</ol>
+
+<footer>
+Lesson 0002 of the rag-blog AI track. Pairs with <code>reference/vector-index-cheatsheet.html</code>.
+</footer>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lesson 0001 — Embeddings: A Vector of Meaning</title>
+<style>
+  :root {
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --paper: #fbfaf7;
+    --accent: #b8541b;
+    --accent-soft: #f4e1d2;
+    --code-bg: #f4f1ea;
+    --rule: #e5e0d4;
+    --hl: #fff3a3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Charter", "Iowan Old Style", "Georgia", "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 64px 32px 96px;
+  }
+  header.lesson-meta {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+  header.lesson-meta .tag {
+    display: inline-block;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-right: 8px;
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: 36px;
+    line-height: 1.2;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 22px;
+    margin: 48px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 {
+    font-size: 17px;
+    margin: 28px 0 8px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  p { margin: 14px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 6px 0; }
+  a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent-soft);
+  }
+  a:hover { border-bottom-color: var(--accent); }
+  code {
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 14.5px;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: 14px;
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 14px 18px;
+    margin: 24px 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .math {
+    font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Georgia", serif;
+    font-style: italic;
+    background: #f7f3e8;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .exercise {
+    background: #f0ebde;
+    border: 1px dashed var(--accent);
+    padding: 18px 22px;
+    margin: 32px 0;
+    border-radius: 6px;
+  }
+  .exercise h3 {
+    color: var(--ink);
+    margin-top: 0;
+  }
+  .tag-anchor {
+    font-family: "SF Mono", "Menlo", monospace;
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 1px 6px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: 4px;
+  }
+  .file-ref {
+    font-family: "SF Mono", "Menlo", monospace;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .file-ref strong { color: var(--ink); }
+  hr { border: none; border-top: 1px solid var(--rule); margin: 48px 0; }
+  .citations {
+    font-size: 14.5px;
+    color: var(--ink-soft);
+  }
+  .citations li { margin: 8px 0; }
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    font-size: 14px;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+  @media print {
+    body { font-size: 11pt; }
+    .page { max-width: none; padding: 24px; }
+    pre { font-size: 10pt; }
+    a { color: var(--ink); border-bottom: none; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+
+<header class="lesson-meta">
+  <span class="tag">Lesson 0001</span>
+  <span>Foundations · ~10 min · hands-on exercise</span>
+</header>
+
+<h1>Embeddings: A Vector of Meaning</h1>
+
+<p class="file-ref">Anchored in <strong>rag_pipeline.py</strong> → <code>class Embedder</code> · <strong>config.py</strong> → <code>MODEL_NAME = "all-MiniLM-L6-v2"</code></p>
+
+<p>You already have a working RAG. You already call <code>embedder.embed_one("how to fix neovim folding")</code> and the system finds the right blog post. But if someone asked you <em>"what is the number that came out?"</em>, what would you say?</p>
+
+<p>By the end of this lesson you will. We'll go from a vague sense that "the model turns text into numbers" to a precise mental model: a <strong>384-dimensional unit vector</strong> in a space where <strong>distance ≈ meaning</strong>. Then we'll look at the four lines in your codebase that turn that idea into a search engine.</p>
+
+<h2>1. The mental model</h2>
+
+<p>An <strong>embedding</strong> is a function that maps a piece of text to a list of real numbers. For our model that list has exactly <span class="math">384</span> numbers. That's it. No magic, no symbols, no floating-point ghosts. Just a list:</p>
+
+<pre><code>[0.021, -0.118, 0.443, ..., 0.077]   # 384 numbers total</code></pre>
+
+<p>But here's the part that makes it useful: <strong>the model is trained so that sentences with similar meaning land near each other in this 384-dimensional space</strong>. So when I embed two sentences and their vectors point in roughly the same direction, that's a mathematical claim that they mean roughly the same thing.</p>
+
+<div class="callout">
+<p><strong>Engineer-to-engineer translation:</strong> an embedding is a <em>hash function from meaning to a fixed-size float array</em>, where "hash collision" has been replaced with a soft "close to" relationship. Like a Bloom filter that returns similarity instead of a boolean.</p>
+</div>
+
+<h2>2. Why 384 dimensions?</h2>
+
+<p>You could embed text in 2 dimensions (and the popular "king − man + woman ≈ queen" demos use exactly that intuition). But 2 dimensions can't distinguish between "neovim folding", "vim folding", and "folding laundry".</p>
+
+<p>More dimensions = more axes to encode meaning along. The trade-off:</p>
+
+<ul>
+  <li><strong>More dimensions</strong> = richer representation, but slower similarity computation, more memory, and the risk of <em>overfitting</em> on a small corpus.</li>
+  <li><strong>Fewer dimensions</strong> = faster, but coarser. You can't tell apart concepts that share many axes.</li>
+</ul>
+
+<p>Our model, <code>all-MiniLM-L6-v2</code>, chose <span class="math">384</span> as a sweet spot. It was <strong>distilled</strong> from a larger model (MiniLM = <em>Mini Language Model</em>) — trained to mimic a bigger model's outputs while being 5× smaller and faster. The <code>L6</code> means "6 transformer layers", and <code>v2</code> is the second training run. <a href="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2">See the model card on Hugging Face →</a></p>
+
+<h2>3. The math you'll see in the code: cosine similarity</h2>
+
+<p>Once you have two vectors, you need a way to say "how close are they". Three options show up in production systems:</p>
+
+<ol>
+  <li><strong>Euclidean distance</strong> — straight-line distance. Penalizes vectors of different magnitudes.</li>
+  <li><strong>Dot product</strong> — fast, sensitive to magnitude.</li>
+  <li><strong>Cosine similarity</strong> — dot product normalized by length. Measures <em>direction only</em>.</li>
+</ol>
+
+<p>We use cosine similarity. The formula is the one you learned in high school:</p>
+
+<p style="text-align:center;"><span class="math">cos(θ) = (A · B) / (‖A‖ · ‖B‖)</span></p>
+
+<p>In NumPy, that's three lines. Read this — it's the same code, just with names:</p>
+
+<pre><code>import numpy as np
+from numpy.linalg import norm
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (norm(a) * norm(b))</code></pre>
+
+<p>The output is in <span class="math">[-1, 1]</span>. For normalized text vectors, you'll typically see <span class="math">[0.2, 0.95]</span> in practice — never quite <span class="math">1.0</span> unless the inputs are identical.</p>
+
+<div class="callout">
+<p><strong>Why normalize?</strong> Notice the <code>normalize_embeddings=True</code> flag in our <code>Embedder.embed</code> method. It makes every output vector have length 1. When vectors are unit-length, cosine similarity collapses to a single dot product — much faster. <a href="https://www.pinecone.io/learn/series/nlp/dense-vector-embeddings-nlp/">Pinecone has a great visual on this →</a></p>
+</div>
+
+<h2>4. Now read your own code</h2>
+
+<p>Open <code>rag_pipeline.py</code> and find the <code>Embedder</code> class. There are exactly four lines that turn "text" into "the magic vector" worth examining:</p>
+
+<p><span class="tag-anchor">rag_pipeline.py · Embedder.__init__</span></p>
+<pre><code>self.model = SentenceTransformer(model_name)
+dim = self.model.get_embedding_dimension()</code></pre>
+
+<p>This loads the model. Internally, it's a stack of 6 transformer encoder layers followed by a <em>mean pooling</em> layer that collapses the per-token outputs into a single 384-float vector. <a href="https://www.sbert.net/">SBERT documentation has the architecture diagram →</a></p>
+
+<p><span class="tag-anchor">rag_pipeline.py · Embedder.embed</span></p>
+<pre><code>return self.model.encode(
+    texts,
+    show_progress_bar=True,
+    normalize_embeddings=True
+)</code></pre>
+
+<p>Three flags worth understanding:</p>
+<ul>
+  <li><code>show_progress_bar=True</code> — UX, irrelevant to the math.</li>
+  <li><code>normalize_embeddings=True</code> — every output has length 1. We discussed why.</li>
+  <li>The return type is a <code>np.ndarray</code> of shape <code>(n_texts, 384)</code>.</li>
+</ul>
+
+<p><span class="tag-anchor">rag_pipeline.py · Embedder.embed_one</span></p>
+<pre><code>return self.model.encode([text], normalize_embeddings=True)[0].tolist()</code></pre>
+
+<p>One sentence in, one vector out. The <code>[0]</code> is because <code>encode</code> always returns a batch; we asked for a batch of one. The <code>.tolist()</code> converts to a Python list (LanceDB wants lists, not NumPy arrays).</p>
+
+<p><span class="tag-anchor">config.py</span></p>
+<pre><code>MODEL_NAME = "all-MiniLM-L6-v2"</code></pre>
+
+<p>One constant. Change this single string and you've migrated the entire embedding pipeline to a different model — a different dimensionality, different speed/quality tradeoff, different cost. The whole architecture is parameterized by it.</p>
+
+<h2>5. What the encoder actually does (intuition, no math)</h2>
+
+<p>If you read "transformer" and feel your eyes glaze over, here's the one-paragraph version:</p>
+
+<p>The encoder reads your text <em>token by token</em> (roughly: sub-word pieces, like <code>"un"</code> + <code>"##believ"</code> + <code>"##able"</code>). For each token, it produces a vector. Then it does a series of "<strong>attention</strong>" steps: each token looks at every other token and decides how much to mix in. By the end, each token's vector has been informed by the whole sentence's context.</p>
+
+<p>Then <strong>mean pooling</strong> averages all the token vectors into one. That's the embedding.</p>
+
+<p>That's it. You don't need to derive the attention equations to use the model — but knowing that "context" is computed <em>across the whole sentence</em> is the difference between treating this as a magic black box and treating it as a function you can reason about.</p>
+
+<p>When you want the full picture, <a href="https://lilianweng.github.io/posts/2023-01-27-the-transformer-family-v2/">Lilian Weng's Transformer Family post</a> and <a href="https://www.youtube.com/watch?v=kCc8FmEb1nY">Karpathy's "Let's build GPT"</a> are the canonical deep dives.</p>
+
+<h2>6. Hands-on exercise</h2>
+
+<div class="exercise">
+<h3>Run this in your rag-blog repo</h3>
+
+<p>You should be in the repo with the venv active (<code>mise run install</code> once, then <code>mise run serve</code> not needed for this).</p>
+
+<p>Drop this into a file <code>playground.py</code> at the repo root:</p>
+
+<pre><code>"""Quick embeddings playground. Run: uv run python playground.py"""
+import numpy as np
+from rag_pipeline import Embedder
+
+embedder = Embedder()
+
+# Three sentences. Two are paraphrases. One is unrelated.
+sentences = [
+    "How do I configure Neovim folding?",
+    "What's the best way to set up code folding in Neovim?",
+    "How do I cook a hard-boiled egg?",
+]
+
+vecs = embedder.embed(sentences)
+
+def cos(a, b):
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+print("\nPairwise cosine similarity:\n")
+for i in range(len(sentences)):
+    for j in range(i + 1, len(sentences)):
+        score = cos(vecs[i], vecs[j])
+        print(f"  {score:.3f}  '{sentences[i][:40]}...'  vs  '{sentences[j][:40]}...'")
+
+print(f"\nEach vector has {vecs.shape[1]} dimensions.")
+print(f"Vector length (should be ~1.0): {np.linalg.norm(vecs[0]):.4f}")
+print(f"First 5 numbers of sentence 0: {vecs[0][:5]}")
+</code></pre>
+
+<p><strong>Expected output</strong> (paraphrase pair scores higher than unrelated):</p>
+
+<pre><code>Pairwise cosine similarity:
+  0.78  'How do I configure Neovim folding?...'  vs  'What's the best way to set up...'
+  0.05  'How do I configure Neovim folding?...'  vs  'How do I cook a hard-boiled egg...'
+  0.04  'What's the best way to set up code ...'  vs  'How do I cook a hard-boiled egg...'
+
+Each vector has 384 dimensions.
+Vector length (should be ~1.0): 1.0000
+First 5 numbers of sentence 0: [-0.0523  0.0821  0.0334 -0.0911  0.0203]</code></pre>
+
+<p><strong>Things to notice:</strong></p>
+<ol>
+  <li>The two "Neovim folding" sentences score around 0.7+ — high semantic similarity, different words.</li>
+  <li>Either of them vs "hard-boiled egg" is near 0 — the model has correctly clustered topics apart.</li>
+  <li>Vector length is exactly 1.0 (or very close) — confirmation that <code>normalize_embeddings=True</code> is doing its job.</li>
+  <li>No two numbers in the first-5 sample are the same — the model uses the full 384 dimensions, not just a few.</li>
+</ol>
+</div>
+
+<h2>7. What you now know</h2>
+
+<ul>
+  <li>✅ An embedding is a list of 384 floats produced by an encoder neural network.</li>
+  <li>✅ The encoder is trained so that similar meanings produce similar vectors (cosine similarity).</li>
+  <li>✅ Our model is a distilled 6-layer transformer, 80 MB on disk, runs on CPU.</li>
+  <li>✅ The single constant <code>MODEL_NAME = "all-MiniLM-L6-v2"</code> parameterizes the entire embedding pipeline.</li>
+  <li>✅ "Cosine similarity" is just the cosine of the angle between two vectors; with normalized vectors, it's a dot product.</li>
+  <li>✅ The line in your code that actually returns the number is <code>self.model.encode([text], normalize_embeddings=True)[0].tolist()</code>.</li>
+</ul>
+
+<h2>8. What you don't know yet (next lessons)</h2>
+
+<ul>
+  <li>How do you do "search" with embeddings? (k-NN, ANN, vector databases — Lesson 2)</li>
+  <li>Why does cosine similarity miss exact keyword matches? (Lexical search — Lesson 3)</li>
+  <li>How do you combine vector and keyword rankings? (RRF — Lesson 4)</li>
+</ul>
+
+<hr>
+
+<div class="callout">
+<p><strong>🧠 Ask follow-up questions.</strong> Stuck on any of this? Want to dig into the attention mechanism, or try a different model size, or measure inference speed on your machine? Tell me what to focus on next.</p>
+</div>
+
+<h2>Citations &amp; further reading</h2>
+<ol class="citations">
+  <li>Vicki Boykis, <a href="https://vickiboykis.com/what_are_embeddings/"><em>What Are Embeddings?</em></a> — the single best starting point for engineers new to embeddings.</li>
+  <li>Pinecone, <a href="https://www.pinecone.io/learn/series/nlp/dense-vector-embeddings-nlp/"><em>Dense Vector Embeddings</em></a> — clean visual explanations of cosine similarity and normalization.</li>
+  <li><a href="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2">HuggingFace model card: <code>all-MiniLM-L6-v2</code></a> — the model we use, with benchmarks and training data.</li>
+  <li><a href="https://www.sbert.net/">Sentence-Transformers documentation</a> — API reference for the library we depend on.</li>
+  <li>Lilian Weng, <a href="https://lilianweng.github.io/posts/2023-01-27-the-transformer-family-v2/"><em>The Transformer Family v2</em></a> — deep dive on the architecture. Read after the practical side clicks.</li>
+  <li>Lilian Weng, <a href="https://lilianweng.github.io/posts/2017-10-15-word-embedding/"><em>Learning Word Embedding</em></a> — history from word2vec to modern encoders.</li>
+</ol>
+
+<footer>
+Lesson 0001 of the rag-blog AI track. Mission grounded in <code>MISSION.md</code>. Resources in <code>RESOURCES.md</code>.
+</footer>
+
+</main>
+</body>
+</html>

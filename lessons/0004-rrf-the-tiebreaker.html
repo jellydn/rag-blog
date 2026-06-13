@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Lesson 0004 — RRF: the tiebreaker that fuses two rank lists</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161a22; --ink: #e6e6e6; --muted: #9aa3b2;
+    --accent: #7cc4ff; --accent2: #ffd479; --good: #8bd17c; --bad: #ff8b8b;
+    --code: #0b0d12; --line: #232936;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.65;
+  }
+  main { max-width: 880px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 2.1rem; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 1.4rem; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.1rem; color: var(--accent); margin-top: 32px; }
+  .lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 24px; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.78rem; background: var(--line); color: var(--muted); margin-right: 6px; }
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre {
+    background: var(--code); border: 1px solid var(--line); border-radius: 8px;
+    padding: 16px 18px; overflow-x: auto; font-size: 0.88rem; line-height: 1.55;
+  }
+  :not(pre) > code {
+    background: var(--code); padding: 1px 6px; border-radius: 4px; font-size: 0.9em;
+    color: var(--accent2); border: 1px solid var(--line);
+  }
+  .callout {
+    background: var(--panel); border-left: 3px solid var(--accent);
+    padding: 14px 18px; border-radius: 6px; margin: 20px 0;
+  }
+  .callout.warn { border-left-color: var(--bad); }
+  .callout.tip  { border-left-color: var(--accent2); }
+  .callout strong { color: var(--accent2); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.94rem; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--accent); font-weight: 600; }
+  .num { font-family: ui-monospace, monospace; color: var(--accent2); }
+  .ok { color: var(--good); }
+  .no { color: var(--bad); }
+  .toc { background: var(--panel); padding: 16px 20px; border-radius: 8px; margin: 24px 0; }
+  .toc ol { margin: 8px 0 0 0; padding-left: 22px; }
+  .toc li { margin: 4px 0; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  a:hover { border-bottom-style: solid; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+  .nav { display: flex; justify-content: space-between; margin: 32px 0; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .nav a { border: none; }
+  blockquote { border-left: 3px solid var(--accent2); margin: 16px 0; padding: 4px 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <p>
+    <span class="tag">Lesson 0004</span>
+    <span class="tag">RRF</span>
+    <span class="tag">Hybrid Search</span>
+  </p>
+  <h1>RRF: the tiebreaker that fuses two rank lists</h1>
+  <p class="lede">
+    You have a vector search that scores 0–1 and a BM25 search that scores 0–30.
+    Adding them is meaningless. <strong>Reciprocal Rank Fusion</strong> sidesteps the
+    whole scale problem by using <em>ranks</em>, not scores. This lesson walks through
+    the algorithm, the code, and the three numbers you have to know: <code>k=60</code>,
+    <code>VECTOR_WEIGHT=0.7</code>, <code>BM25_WEIGHT=0.3</code>.
+  </p>
+
+  <div class="toc">
+    <strong>Contents</strong>
+    <ol>
+      <li><a href="#recap">Recap: the score-scale problem</a></li>
+      <li><a href="#naive">The naive solution: normalize</a></li>
+      <li><a href="#insight">The RRF insight: just use ranks</a></li>
+      <li><a href="#formula">The formula, slowly</a></li>
+      <li><a href="#walkthrough">Walkthrough: <code>HybridSearch.search</code></a></li>
+      <li><a href="#k60">Why <code>k=60</code></a></li>
+      <li><a href="#weights">Why the weights are 0.7 and 0.3</a></li>
+      <li><a href="#exercise">Exercise: <code>playground_rrf.py</code></a></li>
+      <li><a href="#check">Check your understanding</a></li>
+    </ol>
+  </div>
+
+  <h2 id="recap">1. Recap: the score-scale problem</h2>
+  <p>
+    In Lesson 0003 we ran the same query through both methods and got two different
+    universes of scores:
+  </p>
+  <pre>cosine :  [0.10 .. 0.67]      (bounded 0..1)
+BM25   :  [7.49 .. 29.98]     (unbounded positive)</pre>
+  <p>
+    They are not on the same axis. You <em>cannot</em> add them. You <em>cannot</em>
+    take a weighted average. You cannot min-max them into the same range without
+    losing information about confidence.
+  </p>
+  <p>
+    The brute-force idea: <em>normalize</em>. Min-max into [0,1]. Take a weighted
+    average. Done. We did that exercise in §2 of Lesson 0003. It works — barely —
+    but it has three nasty failure modes. Let me show you, because the pain of
+    normalization is the whole reason RRF exists.
+  </p>
+
+  <h2 id="naive">2. The naive solution: normalize</h2>
+  <p>Three ways to normalize, and why each one breaks something:</p>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>How</th><th>Failure mode</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Min-max</strong></td>
+        <td><code>norm = (x - min) / (max - min)</code></td>
+        <td>One outlier query (a single very high score) crushes everything else to near 0. The next query has different min/max and the scale is unstable.</td>
+      </tr>
+      <tr>
+        <td><strong>Z-score</strong></td>
+        <td><code>z = (x - μ) / σ</code></td>
+        <td>Mean and std assume a roughly normal distribution. Cosine on a real corpus is heavy-tailed and bounded. Z-scores are unbounded and sign-flipping.</td>
+      </tr>
+      <tr>
+        <td><strong>Sigmoid</strong></td>
+        <td><code>σ(x) = 1 / (1 + e^-x)</code></td>
+        <td>Needs a temperature parameter tuned per query distribution. Magic numbers everywhere.</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout warn">
+    <strong>The deeper problem:</strong> normalization conflates <em>score</em> and <em>confidence</em>.
+    A score of 0.67 in cosine is genuinely different from 0.67 in BM25 — they're
+    computed from totally different signals. Folding them into the same number
+    throws away information you needed.
+  </div>
+
+  <h2 id="insight">3. The RRF insight: just use ranks</h2>
+  <p>
+    The Cormack, Clarke &amp; Buettcher paper from 2009 had a simple, beautiful idea:
+    <strong>when you sort a list of candidates by score, the actual score values
+    don't matter — only the position does.</strong> A candidate that ranked 1st by
+    cosine is more similar to the query than one that ranked 5th, regardless of
+    whether the score was 0.95 or 0.7.
+  </p>
+  <p>
+    So instead of mixing scores, we mix <em>ranks</em>. Each ranker (vector, BM25)
+    produces an ordered list. RRF walks every list, and for each document that
+    appears in <em>any</em> list, it sums the per-list contribution:
+  </p>
+  <pre>RRF(d) = Σᵢ  wᵢ / (k + rankᵢ(d))</pre>
+  <p>
+    Where <code>i</code> indexes the ranker (vector, BM25, …), <code>rankᵢ(d)</code>
+    is the 1-indexed position of <code>d</code> in ranker <code>i</code>'s list
+    (or "did not appear" — handled below), <code>k</code> is a smoothing constant
+    (we use <code>60</code>), and <code>wᵢ</code> is the weight for that ranker
+    (we use <code>0.7</code> for vector, <code>0.3</code> for BM25).
+  </p>
+  <div class="callout tip">
+    <strong>Why this works:</strong> ranks are a universally comparable unit.
+    A rank of 1 means "best" in every retrieval system, whether the underlying
+    score is a probability, a BM25 term, or a cosine distance. Ranks are
+    <em>naturally normalized</em>.
+  </div>
+
+  <h2 id="formula">4. The formula, slowly</h2>
+  <p>Take a document <code>d</code> and two rankers, vector and BM25. Compute the RRF score step by step:</p>
+  <pre>RRF(d) =  w_vec / (k + rank_vec(d))   +   w_bm25 / (k + rank_bm25(d))</pre>
+  <p>
+    The contributions are inverse-rank: a rank of 1 gives <code>1/(60+1) = 0.01639</code>,
+    a rank of 2 gives <code>1/62 = 0.01613</code>, a rank of 100 gives
+    <code>1/160 = 0.00625</code>. The first few ranks dominate; after rank 30 or
+    so, additional rank positions barely matter.
+  </p>
+  <p>
+    <strong>What if a document is missing from one list?</strong> Two valid choices:
+  </p>
+  <ul>
+    <li>Treat it as having infinite rank (contribution ≈ 0). This is what we do.</li>
+    <li>Treat it as a tie at the bottom. Less common.</li>
+  </ul>
+  <p>
+    <strong>What if a document is missing from <em>both</em> lists?</strong> It never
+    enters the RRF computation at all. Trivially correct.
+  </p>
+
+  <h3>Worked example, by hand</h3>
+  <p>
+    Say we have a document <code>d</code> that ranked <strong>1st by cosine</strong>
+    and <strong>4th by BM25</strong>. With <code>k=60</code>, <code>w_vec=0.7</code>,
+    <code>w_bm25=0.3</code>:
+  </p>
+  <pre>RRF(d) = 0.7 / (60 + 1)   +   0.3 / (60 + 4)
+       = 0.7 / 61          +   0.3 / 64
+       = 0.01148           +   0.00469
+       = 0.01617</pre>
+  <p>
+    Now another document <code>d'</code> that ranked <strong>3rd by cosine</strong>
+    and <strong>1st by BM25</strong>:
+  </p>
+  <pre>RRF(d') = 0.7 / (60 + 3)  +   0.3 / (60 + 1)
+       = 0.7 / 63          +   0.3 / 61
+       = 0.01111           +   0.00492
+       = 0.01603</pre>
+  <p>
+    <code>d</code> beats <code>d'</code> by 0.00014 — a hair. RRF correctly says
+    "both lists like both documents, but vector likes <code>d</code> a bit more."
+  </p>
+
+  <h2 id="walkthrough">5. Walkthrough: <code>HybridSearch.search</code></h2>
+  <p>Here's the actual code from <code>rag_pipeline.py</code>:</p>
+  <pre>class HybridSearch:
+    def search(self, query, top_k=5):
+        t0 = time.time()
+        # Step 1: get vector hits (top_k * 2 for a fudge factor)
+        query_vec = self.embedder.embed_one(query)
+        vec_results = self.vector_store.vector_search(query_vec, top_k=top_k * 2)
+
+        # Step 2: get BM25 hits (same fudge factor)
+        bm25_results = self.bm25.search(query, top_k=top_k * 2)
+
+        # Step 3: build a dict of {chunk_id: result_with_scores}
+        scores: dict[str, dict] = {}
+
+        # Step 4: walk the vector rank list, add RRF contribution
+        for rank, r in enumerate(vec_results):
+            cid = r["id"]
+            scores[cid] = {
+                **r,
+                "rrf_score":  self.vector_weight / (self.rrf_k + rank + 1),
+                "vector_rank": rank + 1,
+                "bm25_rank": None,
+                "vector_score": float(1 - r.get("score", 0)),
+            }
+
+        # Step 5: walk the BM25 rank list, add RRF contribution
+        for rank, r in enumerate(bm25_results):
+            cid = r["doc_id"]
+            boost = self.bm25_weight / (self.rrf_k + rank + 1)
+            if cid in scores:
+                # already in dict — just add BM25's contribution
+                scores[cid]["rrf_score"] += boost
+                scores[cid]["bm25_rank"] = rank + 1
+            else:
+                # not in vector list at all — start a new entry
+                scores[cid] = hit_from_bm25_only(
+                    cid, r["content"], self.bm25.chunk_meta.get(cid, {}),
+                    rank + 1, boost,
+                )
+
+        # Step 6: sort by rrf_score, return top-k
+        results = sorted(scores.values(), key=lambda x: x["rrf_score"], reverse=True)[:top_k]
+        return results, timing</pre>
+
+  <h3>Reading the code, line by line</h3>
+  <p><strong>Step 1-2:</strong> retrieve top <code>2k</code> from each method. The <code>2k</code> is a fudge factor — we over-fetch because RRF can rescue a chunk that was rank 7 in cosine but rank 1 in BM25. If we only fetched <code>k</code> from each, that chunk would be excluded from both lists.</p>
+  <p>
+    <strong>Step 3:</strong> a dict keyed by chunk id. This is the union operation.
+    The dict will grow to be the union of all chunks that appear in either list.
+  </p>
+  <p>
+    <strong>Step 4:</strong> walk the vector list. For each hit at rank <code>r</code> (0-indexed),
+    compute the per-rank contribution <code>w_vec / (k + r + 1)</code>. Note the
+    <code>+ 1</code> — the code uses 0-indexed ranks, so we shift to 1-indexed.
+    Rank 0 in code → rank 1 in formula → contribution <code>0.7 / 61</code>.
+  </p>
+  <p>
+    <strong>Step 5:</strong> walk the BM25 list. If the chunk is already in the
+    dict (it appeared in the vector list too), we <em>add</em> the BM25 contribution
+    to its existing RRF score. If not, we create a new entry from scratch with only
+    the BM25 contribution. This is how chunks "missing" from one list get a partial
+    score (just the other list's contribution).
+  </p>
+  <p>
+    <strong>Step 6:</strong> sort the union dict by RRF score, take the top <code>k</code>.
+    Done.
+  </p>
+
+  <h2 id="k60">6. Why <code>k=60</code></h2>
+  <p>
+    From the original Cormack et al. paper: <code>k=60</code> was chosen empirically
+    as a robust default that performs well across many document collections. The
+    intuition:
+  </p>
+  <ul>
+    <li><strong>Too small (k → 0):</strong> RRF degenerates into "first rank wins everything." A document at rank 1 contributes 1.0, a document at rank 100 contributes 0.01 — the gap is huge, and you lose any signal from secondary rankers.</li>
+    <li><strong>Too large (k → ∞):</strong> all ranks become equal. <code>1/(k+1) ≈ 1/(k+100)</code>. You lose all positional information; RRF degenerates into "count how many lists contain this document."</li>
+    <li><strong>k=60:</strong> a balance. The first few ranks still dominate, but the tail contributes meaningfully.</li>
+  </ul>
+  <p>
+    Concretely, here's how the contribution <code>1/(k + rank)</code> decays:
+  </p>
+  <table>
+    <thead><tr><th>rank</th><th>1/(k+rank), k=60</th><th>% of rank-1 contribution</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td class="num">0.01639</td><td>100%</td></tr>
+      <tr><td>2</td><td class="num">0.01613</td><td>98%</td></tr>
+      <tr><td>5</td><td class="num">0.01538</td><td>94%</td></tr>
+      <tr><td>10</td><td class="num">0.01429</td><td>87%</td></tr>
+      <tr><td>20</td><td class="num">0.01250</td><td>76%</td></tr>
+      <tr><td>50</td><td class="num">0.00909</td><td>55%</td></tr>
+      <tr><td>100</td><td class="num">0.00625</td><td>38%</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The top 5 ranks contribute almost identically; the top 20 contribute within
+    76% of the leader. After rank 50, contributions are still meaningful. That's
+    the property we want: rank 1 vs rank 2 vs rank 5 vs rank 20 all matter, but
+    the gap between them is graceful, not cliff-like.
+  </p>
+  <div class="callout">
+    <strong>Should you ever change k?</strong> If your retrieval returns long
+    lists (top_k = 100, top_k = 1000), the tail gets heavier. Increasing k to
+    <code>100</code> flattens the curve more. If your retrieval only returns
+    top 10, decreasing k to <code>10</code> sharpens the top. But <code>60</code>
+    is a sane default for almost everything.
+  </div>
+
+  <h2 id="weights">7. Why the weights are 0.7 and 0.3</h2>
+  <p>
+    Our <code>config.py</code>:
+  </p>
+  <pre>VECTOR_WEIGHT = 0.7
+BM25_WEIGHT   = 0.3</pre>
+  <p>
+    The reasoning is empirical, not theoretical. For a well-tuned dense encoder
+    like <code>all-MiniLM-L6-v2</code> on a domain corpus, vector search has higher
+    top-1 precision than BM25 on most queries. But BM25 still catches:
+  </p>
+  <ul>
+    <li>queries that contain rare, distinctive terms (e.g. product names, error codes)</li>
+    <li>queries where the embedding model is confused by polysemy</li>
+    <li>queries where the user's wording is lexically close to a chunk's wording</li>
+  </ul>
+  <p>
+    A 70/30 split says: "trust the semantic ranking first, but let the lexical
+    ranking break ties." It's the same intuition as a tiebreaker in sports — the
+    primary score decides, the secondary score settles close calls.
+  </p>
+  <p>
+    The exact ratio depends on your domain. If your chunks are long, well-written
+    prose, you might want 50/50 or even 30/70 (BM25 has more terms to work with).
+    If your chunks are short and contain lots of unique identifiers, the same.
+    For a TIL-style corpus like ours, where every article is short and the
+    vocabulary is technical, 70/30 is a reasonable starting point.
+  </p>
+
+  <h2 id="exercise">8. Exercise: <code>playground_rrf.py</code></h2>
+  <p>
+    The playground runs the three queries from the paraphrase robustness test
+    through the real <code>HybridSearch</code> class and shows the fused ranking.
+    You'll see exactly how RRF reorders the BM25-only hits and the cosine-only
+    hits into a final list.
+  </p>
+  <ol>
+    <li>Open <code>playground_rrf.py</code> in your editor.</li>
+    <li>Run it: <code>uv run python playground_rrf.py</code></li>
+    <li>For each query, look at the <em>Fusion trace</em> table: the BM25 rank, the cosine rank, the per-list RRF contribution, and the final RRF score. The TARGET chunk (the Neovim-folding article) is highlighted.</li>
+    <li>Predict before each one: will the TARGET be in the final top-3?</li>
+  </ol>
+  <p>
+    Pay special attention to the third query, <code>"collapse code blocks in my editor"</code>:
+  </p>
+  <ul>
+    <li>BM25 ranked TARGET at 16 (basically invisible).</li>
+    <li>Cosine ranked TARGET at 3 (a soft hit).</li>
+    <li>Watch RRF: the cosine contribution rescues the chunk, the BM25 contribution is ≈ 0 (missing from top-10), and the chunk climbs to a useful final position.</li>
+  </ul>
+  <p>
+    This is the RRF "rescue" pattern — the most important behavior in the whole
+    lesson.
+  </p>
+
+  <h2 id="check">9. Check your understanding</h2>
+  <ol>
+    <li>
+      <strong>The scale problem.</strong> Vector search returned scores in [0, 1]
+      and BM25 in [0, 30]. Without RRF, can you <em>just</em> min-max both to [0, 1]
+      and add them with weights? What's the failure mode?
+    </li>
+    <li>
+      <strong>The formula.</strong> For a chunk at cosine rank 1 and BM25 rank 1,
+      with our weights, what is the RRF score? (Do the math by hand before running
+      the playground.)
+    </li>
+    <li>
+      <strong>The smoothing constant.</strong> If we set <code>k=0</code>, what
+      would the formula become? Why is that wrong? If we set <code>k=10⁶</code>,
+      what would it become? Why is that also wrong?
+    </li>
+    <li>
+      <strong>The weights.</strong> If you built a RAG system over a code corpus
+      where users typically search for exact function names or error strings,
+      which weight would you increase: vector or BM25? Why?
+    </li>
+    <li>
+      <strong>The rescue pattern.</strong> In the playground, the third query
+      has TARGET at cosine #3 but BM25 #16. How much of the final RRF score for
+      TARGET comes from cosine vs BM25? Why is the BM25 contribution so small?
+    </li>
+  </ol>
+  <p>
+    Try to answer these in your head, then run the playground and check. When
+    you're satisfied, tell me and we'll move on to Lesson 0005: agentic RAG
+    (the <code>agentic.py</code> layer that uses this hybrid search as a
+    primitive).
+  </p>
+
+  <div class="callout tip">
+    <strong>One thing to take away:</strong> RRF is the simplest algorithm that
+    solves a real problem. There is no tuning surface beyond <code>k</code> and
+    the weights, no hyperparameters to learn, no gradients to backprop. It's
+    two line of code that turn two noisy rankers into one stable ranker. The
+    "magic" is that <em>rank is the right unit of comparison</em> across
+    retrieval systems.
+  </div>
+
+  <div class="nav">
+    <a href="0003-bm25-keyword-search-still-matters.html">← Lesson 0003: BM25</a>
+    <a href="0005-agentic-rag-orchestration.html">Lesson 0005: agentic RAG →</a>
+  </div>
+
+  <footer>
+    <p>
+      <strong>Citations &amp; further reading:</strong>
+      <a href="https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf">Cormack, Clarke &amp; Buettcher, "Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods" (SIGIR 2009)</a> ·
+      <a href="https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion">Elasticsearch RRF docs</a> ·
+      <a href="https://docs.opensearch.org/latest/search-plugins/search-pipelines/score-ranker-processor/">OpenSearch Score Ranker</a>
+    </p>
+  </footer>
+</main>
+</body>
+</html>

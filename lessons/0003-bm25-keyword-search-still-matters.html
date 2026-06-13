@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lesson 0003 — BM25: Why Keyword Search Still Matters</title>
+<style>
+  :root {
+    --ink: #1a1a1a; --ink-soft: #4a4a4a; --paper: #fbfaf7;
+    --accent: #b8541b; --accent-soft: #f4e1d2; --code-bg: #f4f1ea;
+    --rule: #e5e0d4; --hl: #fff3a3; --ok: #2e7d32; --warn: #b8541b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--paper); color: var(--ink);
+    font-family: "Charter", "Iowan Old Style", "Georgia", "Times New Roman", serif;
+    font-size: 17px; line-height: 1.65; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 760px; margin: 0 auto; padding: 64px 32px 96px; }
+  header.lesson-meta {
+    border-bottom: 1px solid var(--rule); padding-bottom: 24px; margin-bottom: 32px;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 12px; color: var(--ink-soft); letter-spacing: 0.04em;
+  }
+  header.lesson-meta .tag {
+    display: inline-block; background: var(--accent-soft); color: var(--accent);
+    padding: 2px 8px; border-radius: 3px; margin-right: 8px; text-transform: uppercase;
+  }
+  h1 { font-size: 36px; line-height: 1.2; margin: 0 0 12px; letter-spacing: -0.01em; }
+  h2 { font-size: 22px; margin: 48px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); font-weight: 600; }
+  p { margin: 14px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 6px 0; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+  a:hover { border-bottom-color: var(--accent); }
+  code { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 14.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); border: 1px solid var(--rule); border-radius: 6px; padding: 16px 18px; overflow-x: auto; font-size: 14px; line-height: 1.55; }
+  pre code { background: none; padding: 0; font-size: 14px; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 14px 18px; margin: 24px 0; border-radius: 0 4px 4px 0; }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Georgia", serif; font-style: italic; background: #f7f3e8; padding: 2px 6px; border-radius: 3px; }
+  .exercise { background: #f0ebde; border: 1px dashed var(--accent); padding: 18px 22px; margin: 32px 0; border-radius: 6px; }
+  .exercise h3 { color: var(--ink); margin-top: 0; }
+  .tag-anchor { font-family: "SF Mono", "Menlo", monospace; font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: 3px; display: inline-block; margin-bottom: 4px; }
+  .file-ref { font-family: "SF Mono", "Menlo", monospace; font-size: 13px; color: var(--ink-soft); }
+  .file-ref strong { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  th { font-weight: 600; color: var(--ink-soft); }
+  hr { border: none; border-top: 1px solid var(--rule); margin: 48px 0; }
+  .citations { font-size: 14.5px; color: var(--ink-soft); }
+  .citations li { margin: 8px 0; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--rule); font-size: 14px; color: var(--ink-soft); font-style: italic; }
+  @media print { body { font-size: 11pt; } .page { max-width: none; padding: 24px; } pre { font-size: 10pt; } a { color: var(--ink); border-bottom: none; } }
+</style>
+</head>
+<body>
+<main class="page">
+
+<header class="lesson-meta">
+  <span class="tag">Lesson 0003</span>
+  <span>Retrieval · ~12 min · hands-on exercise</span>
+</header>
+
+<h1>BM25: Why Keyword Search Still Matters</h1>
+
+<p class="file-ref">Anchored in <strong>rag_pipeline.py</strong> → <code>class BM25Index</code> · <code>config.py</code> · <code>BM25Index.search</code></p>
+
+<p>Last lesson you saw the "fold" trap: the same word in two sentences dragged a Neovim folding question and a laundry folding question to a 0.43 cosine score. The embedding model did its best — it raised the score because of the shared word — but it also dampened it because the contexts diverge. What we <em>want</em> in many cases is something else entirely: a hard, unapologetic match on the word "fold" and then a downstream re-ranker to figure out the meaning.</p>
+
+<p>That's what BM25 does. It's the workhorse of search engines for a reason that's older than transformers: <strong>exact word matches are still the strongest signal we have for many queries</strong>, and you don't need a GPU to compute them.</p>
+
+<h2>1. The mental model</h2>
+
+<p>BM25 ranks documents by how well they match the words in a query. It is a scoring function, not a model. There are no learned weights, no GPU, no 80 MB download. It's just an equation.</p>
+
+<p>Three ideas compose it:</p>
+
+<ol>
+  <li><strong>Term frequency (TF)</strong> — the more often a query word appears in a document, the more relevant that document is. But with diminishing returns: the difference between 1 occurrence and 5 is huge; between 50 and 54 is basically nothing.</li>
+  <li><strong>Inverse document frequency (IDF)</strong> — words like "the" and "is" appear in every document and tell you nothing. Words like "neovim" or "polysemy" appear in few documents and are highly discriminative. Weight them more.</li>
+  <li><strong>Length normalization</strong> — a 5,000-word blog post is more likely to contain any given word by accident than a 200-word note. Don't reward it as much.</li>
+</ol>
+
+<p>BM25 combines these three with two tunable knobs (<code>k1</code> and <code>b</code>). It's the formula Elasticsearch uses by default, and the formula your <code>BM25Index</code> implements. <a href="https://www.elastic.co/blog/practical-bm25-part-2-the-bm25-algorithm-and-its-variables">The Elastic blog has the canonical deep dive →</a></p>
+
+<h2>2. The formula, line by line</h2>
+
+<p>For a single query <code>q</code> and a single document <code>D</code>, BM25 is:</p>
+
+<p style="text-align:center;"><span class="math">score(q, D) = Σ_{t ∈ q}  IDF(t) · ( tf(t, D) · (k1 + 1) / ( tf(t, D) + k1 · (1 - b + b · |D|/avgdl ) ) + δ )</span></p>
+
+<p>That's a wall of symbols. Break it into the three pieces:</p>
+
+<table>
+  <tr><th>Piece</th><th>What it does</th></tr>
+  <tr>
+    <td><span class="math">tf(t, D)</span></td>
+    <td>How many times query term <code>t</code> appears in document <code>D</code>.</td>
+  </tr>
+  <tr>
+    <td><span class="math">IDF(t) = log((N - df(t) + 0.5) / (df(t) + 0.5) + 1)</span></td>
+    <td>How rare the term is across the whole corpus. <code>N</code> = total docs, <code>df(t)</code> = number of docs containing <code>t</code>.</td>
+  </tr>
+  <tr>
+    <td><span class="math">|D| / avgdl</span></td>
+    <td>Length penalty: how long this document is, relative to the average. Shorter docs get a boost.</td>
+  </tr>
+</table>
+
+<p>The big fraction in the middle is the <strong>saturating TF</strong>. As <code>tf</code> grows, the numerator grows linearly but the denominator grows linearly plus a constant, so the whole thing asymptotes to <code>(k1 + 1)</code>. That's the "diminishing returns" — the 51st occurrence contributes much less than the 1st.</p>
+
+<p>Our code has one extra symbol: <strong>δ (delta)</strong>. With <code>δ = 0</code> this is plain BM25. With <code>δ &gt; 0</code> this is <strong>BM25+</strong> — an extension that gives a small baseline score to documents that contain a query term <em>at least once</em>, even when the TF saturating function would otherwise return 0. It's a small change that noticeably helps long-doc-vs-short-query behavior. <a href="https://zilliz.com/learn/mastering-bm25-a-deep-dive-into-the-algorithm-and-application-in-milvus">Zilliz's BM25 walkthrough has the BM25+ derivation</a>.</p>
+
+<h2>3. What k1 and b actually control</h2>
+
+<p>These are the two knobs. The defaults (<code>k1=1.5</code>, <code>b=0.75</code>) are not magic — they were empirically tuned on early TREC datasets and have stuck. But you can and should reason about them.</p>
+
+<table>
+  <tr><th>Param</th><th>Range</th><th>Effect of raising it</th><th>When to lower it</th></tr>
+  <tr>
+    <td><code>k1</code></td>
+    <td>0 – ∞ (typical 1.2–2.0)</td>
+    <td>TF contributes more. A document with 5 hits scores much higher than one with 1 hit.</td>
+    <td>When your corpus is short and terse — TF saturation kicks in fast anyway.</td>
+  </tr>
+  <tr>
+    <td><code>b</code></td>
+    <td>0 – 1 (typical 0.75)</td>
+    <td>Length penalty is stronger. Long documents are penalized more for the same TF.</td>
+    <td>When your documents are uniformly sized (TIL notes, tweets) — length is uninformative.</td>
+  </tr>
+</table>
+
+<p><strong>Mental shortcuts:</strong></p>
+<ul>
+  <li><code>b = 0</code>: ignore length entirely. The "raw TF" view.</li>
+  <li><code>b = 1</code>: full length normalization. A document needs proportionally more TF to outscore a shorter one.</li>
+  <li><code>k1 = 0</code>: TF doesn't matter at all. Pure IDF, every match scores the same.</li>
+  <li><code>k1 → ∞</code>: linear TF. The 50th occurrence counts as much as the 1st.</li>
+</ul>
+
+<div class="callout">
+<p><strong>For our blog corpus:</strong> the documents are mixed sizes — some are 200-word TILs, others are 3,000-word guides. The default <code>b=0.75</code> is sensible. <code>k1=1.5</code> is on the high end of typical; you could try <code>k1=1.2</code> if you find long blog posts are dominating top results unfairly. <em>But measure, don't guess.</em></p>
+</div>
+
+<h2>4. Now read your own code</h2>
+
+<p>Open <code>rag_pipeline.py</code> and find <code>class BM25Index</code>. The whole class is ~80 lines. Here are the four pieces worth understanding:</p>
+
+<p><span class="tag-anchor">rag_pipeline.py · BM25Index.__init__</span></p>
+<pre><code>self.k1 = 1.5       # TF saturation knob
+self.b = 0.75       # Length normalization knob
+self.delta = 1.0    # BM25+ lower bound (vs plain BM25's 0.0)</code></pre>
+
+<p>The constructor takes three hyperparameters. The defaults are the standard "BM25+ with mild lower bound" recipe.</p>
+
+<p><span class="tag-anchor">rag_pipeline.py · BM25Index._tokenize</span></p>
+<pre><code>def _tokenize(self, text: str) -> list[str]:
+    return re.findall(r"\b[a-zA-Z][a-zA-Z0-9#]{1,50}\b", text.lower())</code></pre>
+
+<p>One line. Three things it does:</p>
+<ol>
+  <li><code>text.lower()</code> — case folding. "Neovim" and "neovim" are the same token.</li>
+  <li><code>\b[a-zA-Z][a-zA-Z0-9#]{1,50}\b</code> — word boundaries, must start with a letter, can include letters/digits/<code>#</code>, length 2–51. This drops punctuation, single-character tokens (so "I" and "a" don't pollute the index), and supports things like <code>C#</code> and <code>.NET</code> variants.</li>
+  <li>Returns a list, not a set. BM25 needs the actual TF count, not a unique set.</li>
+</ol>
+
+<div class="callout">
+<p><strong>What this tokenizer <em>doesn't</em> do:</strong> no stemming (<code>"running"</code> and <code>"runs"</code> are different tokens), no stop-word removal (<code>"the"</code> and <code>"is"</code> are indexed and get low IDF at query time), no n-grams (no <code>"neovim folding"</code> as a single token). These are all choices. The IDF term in the BM25 score handles the stop-word issue by downweighting them; the choice not to stem trades recall for predictability. <a href="https://www.elastic.co/blog/practical-bm25-part-2-the-bm25-algorithm-and-its-variables">The Elastic blog explains the standard BM25+stemmer combination →</a></p>
+</div>
+
+<p><span class="tag-anchor">rag_pipeline.py · BM25Index.add_documents</span></p>
+<pre><code>def add_documents(self, doc_ids: list[str], texts: list[str]):
+    self.doc_ids = doc_ids
+    self.doc_texts = texts
+    self._doc_tokens = [self._tokenize(t) for t in texts]
+    self.doc_lengths = [len(toks) for toks in self._doc_tokens]
+    self.total_docs = len(texts)
+    self.avg_doc_length = sum(self.doc_lengths) / max(self.total_docs, 1)
+
+    term_to_df: dict = {}
+    for toks in self._doc_tokens:
+        for token in set(toks):         # ← set, not list
+            term_to_df[token] = term_to_df.get(token, 0) + 1
+    self.doc_freqs = term_to_df
+    self._built = True</code></pre>
+
+<p>This is the <strong>index build</strong>. It's just three pieces of state:</p>
+<ul>
+  <li><code>self._doc_tokens</code> — the tokenized documents (kept around for repeated TF lookups at query time).</li>
+  <li><code>self.doc_lengths</code> and <code>self.avg_doc_length</code> — for the length normalization in the formula.</li>
+  <li><code>self.doc_freqs</code> — the per-term <strong>document frequency</strong> (how many documents contain each term), not the per-term <strong>term frequency</strong> (how many times the term appears in each document). DF is used for IDF; TF is computed at query time.</li>
+</ul>
+
+<p>Note <code>set(toks)</code> — we count each term once per document for DF purposes, even if it appears 100 times. The TF is what we count for the per-document term frequency.</p>
+
+<p><span class="tag-anchor">rag_pipeline.py · BM25Index.search</span></p>
+<pre><code>for token in query_tokens:
+    df = self.doc_freqs.get(token, 0)
+    if df == 0:
+        continue                        # ← term not in corpus, skip
+    idf = np.log((n - df + 0.5) / (df + 0.5) + 1.0)
+    for i in range(n):
+        toks = self._doc_tokens[i]
+        tf = toks.count(token)         # ← O(|doc|) per query
+        if tf == 0:
+            continue
+        dl = self.doc_lengths[i]
+        denom = tf + self.k1 * (1 - self.b + self.b * dl / self.avg_doc_length)
+        if denom > 0:
+            scores[i] += idf * (tf * (self.k1 + 1) / denom + self.delta)</code></pre>
+
+<p>This is the full formula. Notice:</p>
+<ul>
+  <li><code>df == 0</code> → <code>continue</code>. If the term isn't in the corpus, it can't help. This is why BM25 silently returns empty for unknown terms.</li>
+  <li><code>idf = log((N - df + 0.5) / (df + 0.5) + 1.0)</code>. The <code>+ 1.0</code> inside the log clamps IDF ≥ 0 — a term that appears in every document still gets a score of exactly 0, not negative.</li>
+  <li><code>toks.count(token)</code> is O(|doc|) per query token per doc — <em>this is the algorithmic hot path</em>. For 83 chunks × 100 tokens × 5 query tokens it's nothing. For 100k chunks, it starts to matter (more in the next lesson).</li>
+  <li>The <code>+ self.delta</code> at the end is BM25+ — the small floor that ensures any matching document gets a non-zero contribution from each query term.</li>
+</ul>
+
+<h2>5. Embeddings vs BM25 — when to use which</h2>
+
+<p>We've now seen both. Here's the working rubric from production RAG systems:</p>
+
+<table>
+  <tr><th>Signal type</th><th>Embeddings win</th><th>BM25 wins</th></tr>
+  <tr>
+    <td><strong>Paraphrase</strong></td>
+    <td>✅ "configure folding" ≈ "set up code folding" — no shared words, embedding catches it</td>
+    <td>❌ Zero overlap; returns nothing</td>
+  </tr>
+  <tr>
+    <td><strong>Exact technical term</strong></td>
+    <td>🟡 Embedding can be confused by polysemy ("fold")</td>
+    <td>✅ "neovim" or "<code>--watch</code>" matches the literal string every time</td>
+  </tr>
+  <tr>
+    <td><strong>Code/identifier</strong></td>
+    <td>❌ <code>socket.id</code> tokenized into pieces, may not match</td>
+    <td>✅ Treated as one token, exact match</td>
+  </tr>
+  <tr>
+    <td><strong>Out-of-vocabulary / typos</strong></td>
+    <td>❌ Encoder may not know the word</td>
+    <td>❌ Lexical match won't work either, but at least it's predictable</td>
+  </tr>
+  <tr>
+    <td><strong>Cross-lingual / semantic</strong></td>
+    <td>✅ Cross-lingual models handle "dog" = "perro"</td>
+    <td>❌ No overlap, returns nothing</td>
+  </tr>
+  <tr>
+    <td><strong>Speed at scale</strong></td>
+    <td>Needs ANN index past ~100k</td>
+    <td>Inverted index scales further; O(query terms × matches)</td>
+  </tr>
+</table>
+
+<p>Production RAG systems don't pick one — they run both and fuse the rankings. That's the next lesson (RRF). <a href="https://opensearch.org/blog/improving-document-retrieval-with-sparse-semantic-encoders/">OpenSearch's hybrid retrieval post explains why this is the consensus →</a></p>
+
+<h2>6. Hands-on exercise</h2>
+
+<div class="exercise">
+<h3>Compare BM25 vs vector search on the real rag-blog index</h3>
+
+<p>Save as <code>playground_bm25.py</code> at the repo root:</p>
+
+<pre><code>"""Lesson 0003 — compare BM25 vs vector search on the real index."""
+import json
+from rag_pipeline import BM25Index, Embedder, VectorStore
+
+# Load existing BM25 index (built during ingest)
+print("Loading BM25 index...")
+with open("data/lancedb/bm25_data.json", encoding="utf-8") as f:
+    bm25 = BM25Index.from_json_dict(json.load(f))
+
+print("Loading vector store + embedder...")
+embedder = Embedder()
+vstore = VectorStore("data/lancedb", embedder.dimension)
+
+# Four queries that should differentiate the two methods
+queries = [
+    "how to configure neovim folding",       # paraphrase + technical term
+    "polysemy",                              # single rare term
+    "neovim",                                # exact brand match
+    "How do I do a barrel roll in Neovim?",  # sentence-shaped, no overlap likely
+]
+
+print(f"\nBM25 corpus: {bm25.total_docs} docs, {len(bm25.doc_freqs)} unique terms")
+print(f"Avg doc length: {bm25.avg_doc_length:.1f} tokens\n")
+
+for q in queries:
+    print(f"=== Query: {q!r} ===")
+    bm25_results = bm25.search(q, top_k=3)
+    print(f"  BM25 top 3:")
+    for r in bm25_results:
+        title = r["content"].split("\n")[0].lstrip("#").strip()[:60]
+        print(f"    {r['score']:6.2f}  {r['doc_id']:25s}  {title}")
+
+    qvec = embedder.embed_one(q)
+    vec_results = vstore.vector_search(qvec, top_k=3)
+    print(f"  Vector top 3 (cosine):")
+    for r in vec_results:
+        title = r["content"].split("\n")[0].lstrip("#").strip()[:60]
+        cos = 1 - r["score"]
+        print(f"    {cos:6.3f}  {r['doc_id']:25s}  {title}")
+    print()
+</code></pre>
+
+<p>Run it: <code>uv run python playground_bm25.py</code>.</p>
+
+<p><strong>What to look for:</strong></p>
+<ol>
+  <li><strong>"neovim"</strong>: BM25 should return chunks containing the literal word with high confidence. Vector search will return the same chunks but the score will be lower if the chunk text is short.</li>
+  <li><strong>"polysemy"</strong>: BM25 returns nothing if no chunk contains that exact word. Vector search <em>can</em> return semantically related content (chunks about word-meaning ambiguity). This is the failure mode from Lesson 0001 in reverse.</li>
+  <li><strong>"How do I do a barrel roll in Neovim?"</strong>: BM25 ranks on "neovim", "barrel", "roll". If no chunk contains "barrel roll", only the "neovim" hits return. Vector search returns chunks semantically about doing unusual things in Neovim, even without word overlap.</li>
+  <li>Note the BM25 score range. It's unbounded positive (with our delta) and not normalized. RRF in the next lesson will be the trick for combining this with vector cosine scores.</li>
+</ol>
+
+<p><strong>Things to try if you have time:</strong></p>
+<ul>
+  <li>Change <code>bm25.k1 = 0.5</code> and re-run. Does the ranking change much?</li>
+  <li>Change <code>bm25.b = 0.0</code> (no length penalty) vs <code>bm25.b = 1.0</code> (full). Watch what happens to long-doc scores.</li>
+  <li>Search for a really common word like "the" or "python" and observe the IDF ≈ 0 behavior — every doc should score the same.</li>
+</ul>
+</div>
+
+<h2>7. The threshold filter — when "below floor" means "no real match"</h2>
+
+<p><em>(Added in a later session, after we built the cosine-threshold feature in Lesson 0002 and applied the same pattern here. Read it as the production-noise-control coda to the BM25 chapter.)</em></p>
+
+<p>The <code>BM25_THRESHOLD</code> in <code>config.py</code> (default <code>1.0</code>) is a raw-score floor: a BM25 hit with <code>score &lt; 1.0</code> is dropped from the BM25 rank list before it reaches the RRF fusion. This is defense against two real failure modes:</p>
+
+<ul>
+  <li><strong>Single-token incidental matches.</strong> A chunk containing the word <code>"set"</code> in a JS method call <code>.set({...})</code> gets a non-zero BM25 score for the query <code>"how to set up neovim folding"</code> — but the chunk isn't actually about Neovim. We saw this in the Lesson 0003 forensic exercise: the html2pdf chunk scored 7.49 almost entirely on the word "set" with <code>idf=2.73</code> (df=5 in an 83-chunk corpus). A floor around 1.0 filters most of these.</li>
+  <li><strong>Stopword piles.</strong> A chunk that mentions 20 common words but none of the actual rare query terms can still score above 0. The floor cuts them off.</li>
+</ul>
+
+<h3>The rule</h3>
+
+<pre><code>if score >= BM25_THRESHOLD:
+    keep
+else:
+    drop   # can still surface via vector search if ranked there</code></pre>
+
+<p><code>BM25_THRESHOLD = 0.0</code> disables the filter (the backward-compat default if you don't tune the floor).</p>
+
+<h3>The adaptive override — "no good match" means "let vector do the work"</h3>
+
+<p>The hard floor has <em>two</em> failure modes worth distinguishing:</p>
+
+<p><strong>1. Truly zero lexical overlap.</strong> A nonsense token like <code>"aardvark"</code> or <code>"xyzzy123"</code> has <code>df=0</code> in the corpus. <code>BM25Index.search</code> filters via <code>if scores[idx] &gt; 0</code> at the end of the search loop, so the BM25 list comes back as <code>[]</code> and the filter block in <code>HybridSearch.search</code> short-circuits on the <code>if bm25_results</code> guard. That's already a graceful degradation — RRF falls back to pure vector search, and the LLM gets vector hits with no BM25 contribution.</p>
+
+<p><strong>2. Weak but non-zero overlap.</strong> A query like <code>"best pizza in naples italy"</code> against our Neovim-folding corpus has weak overlap: common words like <code>"in"</code> and <code>"best"</code> appear in many chunks (high df, low IDF), and tokens like <code>"pizza"</code>/<code>"naples"</code>/<code>"italy"</code> have <code>df=0</code> and don't contribute. The BM25 list comes back with ~8–10 weak hits, with the top hit scoring somewhere in the [1.0, 3.0] range at our default floor of 1.0. <em>This</em> is the case the override is built for:</p>
+
+<p><span class="tag-anchor">rag_pipeline.py · HybridSearch.search (BM25 block)</span></p>
+<pre><code>if self.bm25_threshold > 0 and bm25_results:
+    top_bm25 = float(bm25_results[0].get("score", 0))
+    if top_bm25 < self.bm25_threshold:
+        # No good lexical match anywhere — let vector carry the load.
+        bm25_threshold_suppressed = True
+    else:
+        # apply the normal `>=` filter
+        ...</code></pre>
+
+<p>When the top BM25 hit itself is below the floor, the filter is suppressed and every hit is kept. The <code>bm25_threshold_suppressed</code> flag in the timing dict records that the override fired, so operators can see "this query had no lexical match in the corpus" — and the LLM gets a richer context than it would from a silently wiped BM25 list.</p>
+
+<p>For the full timing-dict schema and the keep/drop rule, see the <a href="../reference/bm25-cheatsheet.html#threshold-filter-production-noise-control">BM25 cheat sheet's Threshold filter section</a>.</p>
+
+<h3>Symmetric with the cosine threshold</h3>
+<p>See <a href="../lessons/0003-bm25-keyword-search-still-matters.html#7-the-threshold-filter-when-quotbelow-floorquot-means-quotno-real-matchquot">Lesson 0003 §7</a> for the production-noise-control coda — two failure modes (zero overlap vs weak overlap), the live sweep data behind the numbers, and tuning advice.</p>
+
+<p>This is the exact same pattern as the cosine-threshold feature in <code>HybridSearch.search</code> (covered in Lesson 0002). The two thresholds are now <strong>symmetric</strong>:</p>
+
+<table>
+  <tr><th></th><th>Cosine threshold</th><th>BM25 threshold</th></tr>
+  <tr>
+    <td><strong>Filter rule</strong></td>
+    <td><code>cosine_sim &lt; floor</code> → dropped</td>
+    <td><code>bm25_score &lt; floor</code> → dropped</td>
+  </tr>
+  <tr>
+    <td><strong>Adaptive override</strong></td>
+    <td>If top cosine &lt; floor → suppress</td>
+    <td>If top BM25 &lt; floor → suppress</td>
+  </tr>
+  <tr>
+    <td><strong>Suppression flag</strong></td>
+    <td><code>timing["vec_threshold_suppressed"]</code></td>
+    <td><code>timing["bm25_threshold_suppressed"]</code></td>
+  </tr>
+  <tr>
+    <td><strong>Drop count</strong></td>
+    <td><code>timing["vec_dropped_threshold"]</code></td>
+    <td><code>timing["bm25_dropped_threshold"]</code></td>
+  </tr>
+  <tr>
+    <td><strong>When suppression fires</strong></td>
+    <td>Top cosine similarity in corpus is below the floor</td>
+    <td>Top BM25 score in corpus is below the floor</td>
+  </tr>
+</table>
+
+<p>Both rank lists are now noise-filtered symmetrically, and both fail gracefully when the corpus has no good match for the query. The two suppression flags tell operators exactly which side had nothing. Production RAG systems often log both and alert when <em>both</em> fire on the same query — that's the "this query is off-topic for the corpus" signal.</p>
+
+<h3>Tuning the floor</h3>
+
+<p>For this corpus (83 chunks of TILs and guides, all about Neovim/editor workflows), <code>BM25_THRESHOLD = 1.0</code> is the right default. You can sweep the floor empirically using the <code>playground_bm25_threshold_sweep.py</code> pattern: run the same 4 canary queries at <code>floor ∈ {0.0, 1.0, 3.0, 5.0, 10.0}</code> and watch the dropped count + top-5 shift. The sweet spot is the lowest floor that filters single-token noise without dropping any chunk that contributes to the RRF top-5.</p>
+
+<p>For a 100k+ chunk corpus where the <em>number</em> of noise hits matters more, <code>5.0</code> is a reasonable next step. Above that, you're trading recall for marginal noise reduction.</p>
+
+<h2>8. What you now know</h2>
+
+<ul>
+  <li>✅ BM25 is a hand-rolled scoring function, not a model. No GPU, no training, no model file.</li>
+  <li>✅ It combines term frequency (with saturation), inverse document frequency, and length normalization.</li>
+  <li>✅ <code>k1</code> controls how much term frequency matters. <code>b</code> controls how much document length matters.</li>
+  <li>✅ Our implementation is BM25+ (the <code>delta</code> term), which gives a small floor to any document containing a query term.</li>
+  <li>✅ The tokenization is case-folding + regex word boundary; no stemming, no stop-word list, no n-grams.</li>
+  <li>✅ The <code>BM25Index</code> build phase computes <code>doc_freqs</code> (the per-term document count). The query phase computes TF on the fly per doc.</li>
+  <li>✅ BM25 wins on exact technical terms, code identifiers, brand names. Embeddings win on paraphrases and semantic queries. That's why we run both.</li>
+  <li>✅ The <code>BM25_THRESHOLD</code> floor filters single-token incidental matches (like the <code>.set({...})</code> false positive) and stopword piles. <code>= 0.0</code> disables it.</li>
+  <li>✅ The adaptive override fires when the top BM25 hit is below the floor — keeps every hit, sets <code>bm25_threshold_suppressed=True</code>. Symmetric with the cosine-threshold suppression (Lesson 0002): both rank lists are noise-filtered the same way, and both fail gracefully when the corpus has no good match for the query.</li>
+</ul>
+
+<h2>9. What you don't know yet (next lessons)</h2>
+
+<ul>
+  <li>How to fuse two rankings (BM25 + vector) into a single result list (Lesson 0004: RRF).</li>
+  <li>How to evaluate which is winning on real queries (Lesson on evaluation).</li>
+  <li>How to swap our hand-rolled BM25 for a real inverted index (e.g. tantivy, Lucene) when we hit scale.</li>
+</ul>
+
+<hr>
+
+<div class="callout">
+<p><strong>🧠 Ask follow-up questions.</strong> Want to try BM25+ vs plain BM25 (delta=0)? Try a stemming tokenizer? Discuss why our hybrid weights are 70/30 instead of 50/50? Tell me where to dig.</p>
+</div>
+
+<h2>Citations &amp; further reading</h2>
+<ol class="citations">
+  <li>Elastic, <a href="https://www.elastic.co/blog/practical-bm25-part-2-the-bm25-algorithm-and-its-variables"><em>Practical BM25 (Part 2): The BM25 Algorithm and Its Variables</em></a> — the definitive explanation of <code>k1</code> and <code>b</code>.</li>
+  <li>Zilliz, <a href="https://zilliz.com/learn/mastering-bm25-a-deep-dive-into-the-algorithm-and-application-in-milvus"><em>Mastering BM25</em></a> — implementation-level walkthrough with BM25+ derivation.</li>
+  <li>OpenSearch, <a href="https://opensearch.org/blog/improving-document-retrieval-with-sparse-semantic-encoders/"><em>Improving Document Retrieval with Sparse Semantic Encoders</em></a> — why hybrid search is the production default.</li>
+  <li>Robertson &amp; Zaragoza, <a href="https://www.nowpublishers.com/article/Details/INR-019"><em>The Probabilistic Relevance Framework: BM25 and Beyond</em></a> — the academic foundation; dense but authoritative.</li>
+</ol>
+
+<footer>
+Lesson 0003 of the rag-blog AI track. Pairs with <code>reference/bm25-cheatsheet.html</code>.
+</footer>
+
+</main>
+</body>
+</html>
