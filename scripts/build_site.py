@@ -5,6 +5,8 @@ Scans ``lessons/*.html`` and ``reference/*.html`` and produces:
   - ``site/index.html``  — a navigation page with links + descriptions
   - ``site/lessons/``    — copies of the lesson HTML files
   - ``site/reference/``  — copies of the reference HTML files
+  - ``site/style.css``   — copied from ``theme/style.css`` (hand-maintained
+    shared stylesheet for the lessons + references)
 
 The output is consumed by the ``publish.yml`` GitHub Actions workflow
 and deployed to GitHub Pages. The script is stdlib-only so it can run
@@ -25,6 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"
 LESSONS_SRC = ROOT / "lessons"
 REFERENCE_SRC = ROOT / "reference"
+THEME_SRC = ROOT / "theme"
 
 # Cap the description shown on the index card so the page stays scannable.
 DESC_MAX = 220
@@ -175,12 +178,17 @@ def main() -> int:
         print(f"error: {REFERENCE_SRC} does not exist", file=sys.stderr)
         return 1
 
-    # Wipe and re-create site/ so we don't leave stale files from a
-    # previous build (e.g. a lesson that was deleted upstream).
-    if SITE.exists():
-        shutil.rmtree(SITE)
+    # Wipe only the generated subdirs so we don't leave stale files
+    # from a previous build (e.g. a lesson that was deleted upstream).
+    if (SITE / "lessons").exists():
+        shutil.rmtree(SITE / "lessons")
+    if (SITE / "reference").exists():
+        shutil.rmtree(SITE / "reference")
     (SITE / "lessons").mkdir(parents=True)
     (SITE / "reference").mkdir(parents=True)
+    # Copy the hand-maintained site stylesheet into the build output.
+    THEME_SRC = ROOT / "theme"
+    shutil.copy2(THEME_SRC / "style.css", SITE / "style.css")
 
     lessons = collect(LESSONS_SRC)
     refs = collect(REFERENCE_SRC)
