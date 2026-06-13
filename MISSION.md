@@ -1,5 +1,6 @@
 # Mission
 
+
 ## Why I'm Learning This
 
 I'm a senior Python engineer (15+ years) with no prior background in AI, ML, or LLMs. I have been **building** a RAG engine for my blog ([productsway.com](https://productsway.com)) for two days — it works, I can ship it, the benchmarks are good — but I have been mostly following recipes. I don't really understand *why* it works.
