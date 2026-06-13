@@ -25,27 +25,114 @@ MIN_DF = 60  # with df=60, IDF ~0.33, per-term at tf=2 ~0.80 → reliably below 
 
 # Single stopword-grade tokens (2+ chars to pass the tokenizer)
 STOPWORDS_1 = [
-    "in", "is", "on", "to", "of", "at", "by", "as", "an", "be", "do",
-    "go", "he", "if", "it", "me", "my", "no", "or", "so", "up", "us",
-    "we", "the", "and", "but", "for", "not", "you", "all", "can", "had",
-    "her", "was", "one", "our", "out", "are", "has", "his", "how", "its",
-    "may", "new", "now", "old", "see", "way", "who", "did", "got", "let",
-    "say", "she", "too", "use", "this", "that", "with", "from", "have",
-    "just", "know", "take", "into", "year", "your", "good", "them",
+    "in",
+    "is",
+    "on",
+    "to",
+    "of",
+    "at",
+    "by",
+    "as",
+    "an",
+    "be",
+    "do",
+    "go",
+    "he",
+    "if",
+    "it",
+    "me",
+    "my",
+    "no",
+    "or",
+    "so",
+    "up",
+    "us",
+    "we",
+    "the",
+    "and",
+    "but",
+    "for",
+    "not",
+    "you",
+    "all",
+    "can",
+    "had",
+    "her",
+    "was",
+    "one",
+    "our",
+    "out",
+    "are",
+    "has",
+    "his",
+    "how",
+    "its",
+    "may",
+    "new",
+    "now",
+    "old",
+    "see",
+    "way",
+    "who",
+    "did",
+    "got",
+    "let",
+    "say",
+    "she",
+    "too",
+    "use",
+    "this",
+    "that",
+    "with",
+    "from",
+    "have",
+    "just",
+    "know",
+    "take",
+    "into",
+    "year",
+    "your",
+    "good",
+    "them",
 ]
 
 # 2-token stopword phrases
 STOPWORDS_2 = [
-    "in this", "is a", "is the", "to the", "of the", "in the", "for the",
-    "on the", "to be", "it is", "that is", "this is", "as a", "as the",
-    "with the", "from the", "by the", "at the", "if you", "if we",
-    "you can", "we can", "you can use", "how to", "how do", "how can",
-    "what is", "what are", "where is", "when to",
+    "in this",
+    "is a",
+    "is the",
+    "to the",
+    "of the",
+    "in the",
+    "for the",
+    "on the",
+    "to be",
+    "it is",
+    "that is",
+    "this is",
+    "as a",
+    "as the",
+    "with the",
+    "from the",
+    "by the",
+    "at the",
+    "if you",
+    "if we",
+    "you can",
+    "we can",
+    "you can use",
+    "how to",
+    "how do",
+    "how can",
+    "what is",
+    "what are",
+    "where is",
+    "when to",
 ]
 
 # For comparison / context
 REFERENCE = [
-    ("known_good_neovim", "neovim"),       # df moderate, IDF high → score >> 1
+    ("known_good_neovim", "neovim"),  # df moderate, IDF high → score >> 1
     ("known_canary_collapse", "collapse code blocks in my editor"),  # all terms high df
     ("known_adversarial_pizza", "best pizza in naples italy"),  # returns []
 ]
@@ -72,9 +159,7 @@ def main():
     # RRF invocations.
     print("--- Top-10 highest-df tokens (diagnostic) ---")
     df_pairs = sorted(h.bm25.doc_freqs.items(), key=lambda kv: kv[1], reverse=True)[:10]
-    print(
-        f"{'token':<14s} {'df':>4s}  {'top_bm25':>9s}  {'max_tf':>6s}  {'would_fire?':>11s}"
-    )
+    print(f"{'token':<14s} {'df':>4s}  {'top_bm25':>9s}  {'max_tf':>6s}  {'would_fire?':>11s}")
     print("-" * 60)
     for token, df in df_pairs:
         max_tf = h.bm25.max_tf(token)
@@ -111,11 +196,7 @@ def main():
         raw = h.bm25.search(q, top_k=20)
         top_bm25 = raw[0]["score"] if raw else 0.0
         n_hits = len(raw)
-        fires = (
-            top_bm25 > 0
-            and top_bm25 < floor
-            and timing["bm25_threshold_suppressed"]
-        )
+        fires = top_bm25 > 0 and top_bm25 < floor and timing["bm25_threshold_suppressed"]
         # max_tf across the corpus for any of the query tokens
         tokens = tokenize_for_check(q)
         max_tf = max((h.bm25.max_tf(tok) for tok in tokens), default=0)
@@ -125,7 +206,9 @@ def main():
     print("--- Phase 1: single stopwords at BM25_THRESHOLD=1.0 ---")
     print(f"  (skipping tokens with df < {MIN_DF})")
     print()
-    print(f"{'token':<14s} {'df':>4s}  {'top_bm25':>9s}  {'max_tf':>6s}  {'#hits':>5s}  {'fires?':>6s}")
+    print(
+        f"{'token':<14s} {'df':>4s}  {'top_bm25':>9s}  {'max_tf':>6s}  {'#hits':>5s}  {'fires?':>6s}"
+    )
     print("-" * 60)
     winners_phase1 = []
     for token in STOPWORDS_1:
@@ -134,7 +217,9 @@ def main():
             continue
         top_bm25, n_hits, fires, timing, max_tf = try_query(token, 1.0)
         marker = "  <-- FIRES" if fires else ""
-        print(f"{token:<14s} {df:>4d}  {top_bm25:>9.4f}  {max_tf:>6d}  {n_hits:>5d}  {'YES' if fires else 'no':>6s}{marker}")
+        print(
+            f"{token:<14s} {df:>4d}  {top_bm25:>9.4f}  {max_tf:>6d}  {n_hits:>5d}  {'YES' if fires else 'no':>6s}{marker}"
+        )
         if fires:
             winners_phase1.append((token, top_bm25, n_hits, timing, max_tf))
 
@@ -142,7 +227,9 @@ def main():
     print()
     print("--- Phase 2: 2-token stopword phrases at BM25_THRESHOLD=1.0 ---")
     print()
-    print(f"{'phrase':<24s} {'df':>16s}  {'top_bm25':>9s}  {'max_tf':>6s}  {'#hits':>5s}  {'fires?':>6s}")
+    print(
+        f"{'phrase':<24s} {'df':>16s}  {'top_bm25':>9s}  {'max_tf':>6s}  {'#hits':>5s}  {'fires?':>6s}"
+    )
     print("-" * 80)
     winners_phase2 = []
     for phrase in STOPWORDS_2:
@@ -151,7 +238,9 @@ def main():
         top_bm25, n_hits, fires, timing, max_tf = try_query(phrase, 1.0)
         marker = "  <-- FIRES" if fires else ""
         df_str = get_df(phrase)
-        print(f"{phrase:<24s} {df_str:>16s}  {top_bm25:>9.4f}  {max_tf:>6d}  {n_hits:>5d}  {'YES' if fires else 'no':>6s}{marker}")
+        print(
+            f"{phrase:<24s} {df_str:>16s}  {top_bm25:>9.4f}  {max_tf:>6d}  {n_hits:>5d}  {'YES' if fires else 'no':>6s}{marker}"
+        )
         if fires:
             winners_phase2.append((phrase, top_bm25, n_hits, timing, max_tf))
 

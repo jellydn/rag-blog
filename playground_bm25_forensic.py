@@ -12,6 +12,7 @@ If a query term has df=0 in the corpus, it contributes 0. So when BM25
 returns a chunk, it's because at least one query word appears in it — and
 the more *unique* (high-IDF) the word is, the more it dominates.
 """
+
 import json
 import re
 
@@ -53,8 +54,7 @@ for qt in q_tokens:
     tf = target_toks.count(qt)
     df = bm25.doc_freqs.get(qt, 0)
     if df == 0 or tf == 0:
-        print(f"{qt:10s} {tf:>4d} {df:>5d} {'-':>7s} {0.0:>14.4f}  "
-              f"{'YES' if tf else 'no (df=0)'}")
+        print(f"{qt:10s} {tf:>4d} {df:>5d} {'-':>7s} {0.0:>14.4f}  {'YES' if tf else 'no (df=0)'}")
         continue
     idf = np.log((n - df + 0.5) / (df + 0.5) + 1.0)
     denom = tf + k1 * (1 - b + b * dl / avgdl)
@@ -82,8 +82,9 @@ for qt in q_tokens:
     if qt in target_toks:
         # show the line where the token appears (case-insensitive)
         matches = re.findall(rf"(\b\w*{qt}\w*\b)", target_text, flags=re.IGNORECASE)
-        print(f"  {qt!r:8s}  →  appears {target_toks.count(qt)}×  "
-              f"(variants in text: {matches[:3]})")
+        print(
+            f"  {qt!r:8s}  →  appears {target_toks.count(qt)}×  (variants in text: {matches[:3]})"
+        )
 
 # --- for comparison, do the same for the true hit -------------------------
 print()
@@ -111,5 +112,4 @@ for r in results:
         denom = tf + k1 * (1 - b + b * dl_i / avgdl)
         tf_norm = tf * (k1 + 1) / denom
         contrib = idf * (tf_norm + delta)
-        print(f"    {qt:10s}  tf={tf:>2d}  df={df:>2d}  idf={idf:>6.3f}  "
-              f"contrib={contrib:>7.3f}")
+        print(f"    {qt:10s}  tf={tf:>2d}  df={df:>2d}  idf={idf:>6.3f}  contrib={contrib:>7.3f}")

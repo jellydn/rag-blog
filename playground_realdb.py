@@ -6,6 +6,7 @@ and reports the cosine score distribution across all 83 chunks.
 It also runs the same query through BM25 so we can see both score scales
 side by side — exactly the scale-mismatch problem RRF solves in Lesson 0004.
 """
+
 import json
 
 import numpy as np
@@ -40,9 +41,11 @@ def cosine_distribution(query_vec: np.ndarray) -> np.ndarray:
 
 
 def describe(name: str, scores: np.ndarray) -> None:
-    print(f"  {name:18s}  min={scores.min():.3f}  median={float(np.median(scores)):.3f}"
-          f"  mean={scores.mean():.3f}  p90={float(np.percentile(scores, 90)):.3f}"
-          f"  max={scores.max():.3f}")
+    print(
+        f"  {name:18s}  min={scores.min():.3f}  median={float(np.median(scores)):.3f}"
+        f"  mean={scores.mean():.3f}  p90={float(np.percentile(scores, 90)):.3f}"
+        f"  max={scores.max():.3f}"
+    )
 
 
 # ---- 1) Self-test: pick a real chunk, use it as the query -----------------
@@ -106,6 +109,8 @@ print("=" * 70)
 print(f"  Cosine range observed:  [{sims.min():.3f}, {sims.max():.3f}]  (bounded 0..1)")
 if bm25_results:
     bm_scores = [r["score"] for r in bm25_results]
-    print(f"  BM25    range observed:  [{min(bm_scores):.2f}, {max(bm_scores):.2f}]  (unbounded positive)")
+    print(
+        f"  BM25    range observed:  [{min(bm_scores):.2f}, {max(bm_scores):.2f}]  (unbounded positive)"
+    )
     print("\n  → These are NOT directly addable. RRF sidesteps this by using ranks, not scores.")
     print("    That's the whole point of Lesson 0004.")

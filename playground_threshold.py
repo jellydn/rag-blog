@@ -8,6 +8,7 @@ The threshold drops vector hits the encoder considered essentially unrelated
 to the query. The chunk can still surface via BM25 (with only the BM25
 contribution to its RRF score), but it loses the 0.7*w boost from cosine.
 """
+
 import json
 
 from config import COSINE_THRESHOLD
@@ -31,6 +32,7 @@ def make_hybrid(threshold: float):
         bm25 = BM25Index.from_json_dict(json.load(f))
     # Wire it up the same way create_hybrid_search does, with the threshold.
     from rag_pipeline import HybridSearch
+
     return HybridSearch(vs, bm25, embedder, cosine_threshold=threshold)
 
 
@@ -109,6 +111,8 @@ for q in QUERIES:
     sims = vecs @ qv
     above = (sims >= 0.3).sum()
     print(f"  {q!r}")
-    print(f"    cosine:  min={sims.min():.3f}  median={float(np.median(sims)):.3f}"
-          f"  mean={sims.mean():.3f}  max={sims.max():.3f}")
-    print(f"    chunks with cosine ≥ 0.3: {above}/{len(sims)} ({100*above/len(sims):.0f}%)")
+    print(
+        f"    cosine:  min={sims.min():.3f}  median={float(np.median(sims)):.3f}"
+        f"  mean={sims.mean():.3f}  max={sims.max():.3f}"
+    )
+    print(f"    chunks with cosine ≥ 0.3: {above}/{len(sims)} ({100 * above / len(sims):.0f}%)")

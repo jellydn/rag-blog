@@ -46,4 +46,15 @@ hooks = [
         pass_filenames = false,
         stages = ["manual", "pre-push"],
     },
+    {
+        id = "css-lint",
+        name = "CSS lint (@media balance, body.index print, no inline styles)",
+        entry = "python scripts/css_lint.py",
+        language = "system",
+        pass_filenames = false,
+        # Fast (sub-second, stdlib-only), safe to run on every commit.
+        # No `types` filter so it always runs -- the script reads
+        # fixed paths (theme/style.css, lessons/*.html, reference/*.html)
+        # regardless of which files were staged.
+    },
 ]

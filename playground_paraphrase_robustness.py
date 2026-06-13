@@ -12,6 +12,7 @@ For each query, we report:
 The robustness signal: does the Neovim-folding article (`til-40-...-neovim`)
 stay in the top-1 as we make the query more abstract?
 """
+
 import json
 
 import numpy as np

@@ -2,6 +2,7 @@
 
 Run: uv run python playground.py
 """
+
 import numpy as np
 
 from rag_pipeline import Embedder
@@ -27,9 +28,7 @@ print("\nPairwise cosine similarity:\n")
 for i in range(len(sentences)):
     for j in range(i + 1, len(sentences)):
         score = cos(vecs[i], vecs[j])
-        print(
-            f"  {score:.3f}  '{sentences[i][:40]}...'  vs  '{sentences[j][:40]}...'"
-        )
+        print(f"  {score:.3f}  '{sentences[i][:40]}...'  vs  '{sentences[j][:40]}...'")
 
 print(f"\nEach vector has {vecs.shape[1]} dimensions.")
 print(f"Vector length (should be ~1.0): {np.linalg.norm(vecs[0]):.4f}")

@@ -27,7 +27,7 @@
 
 <p>Cosine similarity between two 384-dimensional vectors is ~1,540 floating-point operations (multiplies, adds, one square root at the end). Call it <span class="math">C</span>. To find the top 5 out of <span class="math">N</span> chunks, you do <span class="math">N</span> comparisons and a sort:</p>
 
-<p style="text-align:center;"><span class="math">cost_exact = N · C</span></p>
+<p class="formula-center"><span class="math">cost_exact = N · C</span></p>
 
 <p>For our current index, that's <code>83 × 1,540 ≈ 128,000</code> FLOPs per query. On a modern CPU at ~10 GFLOPS, this takes microseconds. The end-to-end latency in `DAY1_NOTES.md` was 60–90 ms, and most of that was the embedding model, not the search.</p>
 

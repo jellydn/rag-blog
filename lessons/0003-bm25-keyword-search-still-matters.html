@@ -39,7 +39,7 @@
 
 <p>For a single query <code>q</code> and a single document <code>D</code>, BM25 is:</p>
 
-<p style="text-align:center;"><span class="math">score(q, D) = Σ_{t ∈ q}  IDF(t) · ( tf(t, D) · (k1 + 1) / ( tf(t, D) + k1 · (1 - b + b · |D|/avgdl ) ) + δ )</span></p>
+<p class="formula-center"><span class="math">score(q, D) = Σ_{t ∈ q}  IDF(t) · ( tf(t, D) · (k1 + 1) / ( tf(t, D) + k1 · (1 - b + b · |D|/avgdl ) ) + δ )</span></p>
 
 <p>That's a wall of symbols. Break it into the three pieces:</p>
 

@@ -151,6 +151,28 @@ th { font-weight: 600; color: var(--ink-soft); }
   border-radius: 3px;
 }
 
+/* Centered math display: wraps an inline <span class="math"> in a
+ * block-level <p> to center it. Used by the 3 light-theme lessons
+ * (0001-0003) for the cosine / cost / BM25 formula lines.
+ * Preserves the inline-math look (the <span class="math"> provides
+ * the italic + light bg) -- this class only adds centering. */
+.formula-center {
+  text-align: center;
+}
+
+/* Centered formula display: a self-contained formula box with its
+ * own padding + bg + border-radius. Used by reference/bm25-cheatsheet
+ * for the BM25 formula at the top (no <span class="math"> wrapper --
+ * the class provides all the styling). */
+.formula-display {
+  text-align: center;
+  font-style: italic;
+  font-size: 16px;
+  padding: 12px;
+  background: var(--code-bg);
+  border-radius: 4px;
+}
+
 .num {
   font-family: "SF Mono", "Menlo", "Consolas", monospace;
   color: var(--accent);

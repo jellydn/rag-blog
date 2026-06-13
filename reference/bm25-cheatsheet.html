@@ -12,8 +12,8 @@
 <p class="meta">Quick reference. Pair with <code>lessons/0003-bm25-keyword-search-still-matters.html</code>.</p>
 
 <h2>The formula</h2>
-<p style="font-size: 14px;">For a single query <code>q</code> and document <code>D</code>:</p>
-<p style="text-align:center; font-style: italic; font-size: 16px; padding: 12px; background: var(--code-bg); border-radius: 4px;">
+<p>For a single query <code>q</code> and document <code>D</code>:</p>
+<p class="formula-display">
 score(q, D) = Σ<sub>t ∈ q</sub> IDF(t) · ( tf(t, D)·(k1+1) / (tf(t,D) + k1·(1 - b + b·|D|/avgdl)) + δ )
 </p>
 

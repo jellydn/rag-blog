@@ -198,8 +198,7 @@ class TestBuildSite(unittest.TestCase):
         # body / .page / pre / a selectors; it does NOT have body.index
         # because the global rules lose to body.index at 0,0,1 vs 0,1,1.
         has_index_print = any(
-            "body.index" in block and "body.index .page" in block
-            for block in print_blocks
+            "body.index" in block and "body.index .page" in block for block in print_blocks
         )
         self.assertTrue(
             has_index_print,

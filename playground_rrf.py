@@ -78,8 +78,12 @@ for q in QUERIES:
     rrf_total = rrf_vec + rrf_bm25
 
     print(f"\n  RRF math (by hand, k={RRF_K}):")
-    print(f"    vector contribution: {VECTOR_WEIGHT:>4}/({RRF_K} + {vec_rank or '—':>4}) = {rrf_vec:.6f}")
-    print(f"    BM25   contribution: {BM25_WEIGHT:>4}/({RRF_K} + {bm25_rank or '—':>4}) = {rrf_bm25:.6f}")
+    print(
+        f"    vector contribution: {VECTOR_WEIGHT:>4}/({RRF_K} + {vec_rank or '—':>4}) = {rrf_vec:.6f}"
+    )
+    print(
+        f"    BM25   contribution: {BM25_WEIGHT:>4}/({RRF_K} + {bm25_rank or '—':>4}) = {rrf_bm25:.6f}"
+    )
     print(f"    RRF total (by hand):  {rrf_total:.6f}")
 
     # ---- 3. Run through real HybridSearch and verify --------------------
@@ -94,11 +98,15 @@ for q in QUERIES:
         vrank = hit.get("vector_rank")
         brank = hit.get("bm25_rank")
         rrf = hit.get("rrf_score", 0)
-        print(f"    {r}. rrf={rrf:.5f}  vec#{vrank or '—':>3}  bm25#{brank or '—':>3}  "
-              f"{cid[:45]:45s}  {title}{marker}")
+        print(
+            f"    {r}. rrf={rrf:.5f}  vec#{vrank or '—':>3}  bm25#{brank or '—':>3}  "
+            f"{cid[:45]:45s}  {title}{marker}"
+        )
 
-    print(f"\n  HybridSearch TARGET position: {target_pos}  "
-          f"(rrf_score={target_hit.get('rrf_score', 0):.6f} if in top-5)")
+    print(
+        f"\n  HybridSearch TARGET position: {target_pos}  "
+        f"(rrf_score={target_hit.get('rrf_score', 0):.6f} if in top-5)"
+    )
 
     # ---- 4. Verify by-hand matches HybridSearch -------------------------
     if target_hit is not None:
@@ -140,5 +148,7 @@ for q in QUERIES:
     bm25_rank, _ = find_target_rank(bm25_list, "doc_id")
     rrf_rank, _ = find_target_in_results(results)
     in_top5 = "yes" if rrf_rank else "no"
-    print(f"  {q:<45s} {str(vec_rank or '—'):>8s} {str(bm25_rank or '—'):>8s} "
-          f"{str(rrf_rank or '—'):>8s}  {in_top5:>7s}")
+    print(
+        f"  {q:<45s} {str(vec_rank or '—'):>8s} {str(bm25_rank or '—'):>8s} "
+        f"{str(rrf_rank or '—'):>8s}  {in_top5:>7s}"
+    )
