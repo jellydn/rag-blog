@@ -156,6 +156,59 @@ class TestBuildSite(unittest.TestCase):
             "differ after the build (the copy step is broken or stale)",
         )
 
+    def test_theme_css_has_index_print_block(self):
+        # Guards the index-page @media print block: the index needs its
+        # own @media print block (re-applying the global print rules at
+        # body.index specificity) so it prints correctly. A regression
+        # that accidentally drops this block would cause the index to
+        # print at the screen layout (16px font, 800px max-width)
+        # instead of the print layout (11pt font, no max-width). This
+        # test catches that.
+        #
+        # This test only reads theme/style.css (the source) and does
+        # not need the build to have run, so it works even if
+        # _build_succeeded() returns False.
+        theme_css_path = ROOT / "theme" / "style.css"
+        self.assertTrue(
+            theme_css_path.exists(),
+            f"missing source: {theme_css_path}",
+        )
+        theme_css = theme_css_path.read_text(encoding="utf-8")
+
+        # Extract every @media print { ... } block. The regex handles
+        # both the simple form (@media print {) and the conditional
+        # form (@media print and (...)) in case the style evolves.
+        # No nested braces inside @media print blocks (CSS rules use
+        # braces, but the regex balances one level of nesting just in
+        # case future CSS adds a nested at-rule).
+        print_blocks = re.findall(
+            r"@media[^{]*print[^{]*\{(?:[^{}]|\{[^{}]*\})*\}",
+            theme_css,
+        )
+        self.assertTrue(
+            print_blocks,
+            f"{theme_css_path.relative_to(ROOT)} has no @media print "
+            "block at all (the index + lessons + references will all "
+            "print at the screen layout)",
+        )
+
+        # At least one print block must contain the body.index + body
+        # .index .page rules so the index prints correctly. The global
+        # @media print block (for lessons + references) has only
+        # body / .page / pre / a selectors; it does NOT have body.index
+        # because the global rules lose to body.index at 0,0,1 vs 0,1,1.
+        has_index_print = any(
+            "body.index" in block and "body.index .page" in block
+            for block in print_blocks
+        )
+        self.assertTrue(
+            has_index_print,
+            f"no @media print block in {theme_css_path.relative_to(ROOT)} "
+            "contains the required body.index + body.index .page rules. "
+            "The index will print at the screen layout instead of the "
+            f"print layout. Print blocks found: {print_blocks}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
