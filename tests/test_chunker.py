@@ -1,8 +1,17 @@
-"""Unit tests for markdown chunking (no ML deps)."""
+"""Unit tests for markdown chunking + BM25Index.max_tf helper.
+
+Mostly stdlib-only: the chunker tests need nothing beyond `chunking`.
+The `TestBM25MaxTf` class imports `BM25Index` from `rag_pipeline`,
+which transitively loads the sentence-transformers model. Run the
+full suite with `uv run python -m unittest discover tests` (which
+installs the ML deps via `uv sync`); the chunker tests alone pass
+with just the stdlib.
+"""
 
 import unittest
 
 from chunking import CHUNK_SIZE, Document, MarkdownChunker
+from rag_pipeline import BM25Index
 
 
 class TestMarkdownChunker(unittest.TestCase):
@@ -72,6 +81,34 @@ Body here with enough text to keep the chunk valid for ingestion rules.
             self.assertGreaterEqual(len(c["content"]), 20)
             if len(c["content"]) > CHUNK_SIZE * 2:
                 self.fail(f"chunk unexpectedly large: {len(c['content'])}")
+
+
+class TestBM25MaxTf(unittest.TestCase):
+    """The new BM25Index.max_tf(token) helper used by the suppression playground."""
+
+    def _make_index(self, docs):
+        bm25 = BM25Index()
+        bm25.add_documents(doc_ids=[f"d{i}" for i in range(len(docs))], texts=docs)
+        return bm25
+
+    def test_max_tf_zero_for_missing_token(self):
+        bm25 = self._make_index(["hello world", "foo bar"])
+        self.assertEqual(bm25.max_tf("xyzzy"), 0)
+
+    def test_max_tf_returns_highest_occurrence_count(self):
+        # 'neovim' appears 1x in doc0, 3x in doc1, 2x in doc2 -> max = 3
+        bm25 = self._make_index(
+            [
+                "neovim is cool",
+                "neovim neovim neovim folding",
+                "two neovim mentions here",
+            ]
+        )
+        self.assertEqual(bm25.max_tf("neovim"), 3)
+
+    def test_max_tf_handles_empty_index(self):
+        bm25 = BM25Index()  # never add_documents
+        self.assertEqual(bm25.max_tf("anything"), 0)
 
 
 if __name__ == "__main__":

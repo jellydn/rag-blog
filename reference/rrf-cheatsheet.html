@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>RRF Cheat Sheet — Reciprocal Rank Fusion reference</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<main class=\"page\">
+  <p class="meta">Reference · Lesson 0004</p>
+  <h1>Reciprocal Rank Fusion (RRF) Cheat Sheet</h1>
+  <p class="lede">Printable. Designed to live next to your editor.</p>
+
+  <h2>The formula</h2>
+  <pre>RRF(d) = Σᵢ  wᵢ / (k + rankᵢ(d))</pre>
+  <ul>
+    <li><code>d</code> = document / chunk</li>
+    <li><code>i</code> = index over rankers (vector, BM25, …)</li>
+    <li><code>rankᵢ(d)</code> = 1-indexed position of <code>d</code> in ranker <code>i</code>'s list</li>
+    <li><code>k</code> = smoothing constant (Cormack et al. default: <code>60</code>)</li>
+    <li><code>wᵢ</code> = weight for ranker <code>i</code> (sum to 1.0 across rankers, optional)</li>
+    <li>If <code>d</code> is missing from ranker <code>i</code>, its contribution is <code>0</code>.</li>
+  </ul>
+
+  <h2>Our constants (from <code>config.py</code>)</h2>
+  <table>
+    <tr><th>Name</th><th>Value</th><th>Meaning</th></tr>
+    <tr><td><code>RRF_K</code></td><td class="num">60</td><td>Smoothing constant (Cormack default)</td></tr>
+    <tr><td><code>VECTOR_WEIGHT</code></td><td class="num">0.7</td><td>Weight for cosine-similarity ranker</td></tr>
+    <tr><td><code>BM25_WEIGHT</code></td><td class="num">0.3</td><td>Weight for BM25 ranker</td></tr>
+  </table>
+
+  <h2>Rank-decay table (k = 60)</h2>
+  <table>
+    <thead><tr><th>rank</th><th>1/(k+rank)</th><th>% of rank-1</th><th>weighted (×0.7 vec, ×0.3 bm25)</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td class="num">0.01639</td><td>100%</td><td class="num">0.01148 / 0.00492</td></tr>
+      <tr><td>2</td><td class="num">0.01613</td><td>98%</td><td class="num">0.01129 / 0.00484</td></tr>
+      <tr><td>3</td><td class="num">0.01587</td><td>97%</td><td class="num">0.01111 / 0.00476</td></tr>
+      <tr><td>5</td><td class="num">0.01538</td><td>94%</td><td class="num">0.01077 / 0.00462</td></tr>
+      <tr><td>10</td><td class="num">0.01429</td><td>87%</td><td class="num">0.01000 / 0.00429</td></tr>
+      <tr><td>20</td><td class="num">0.01250</td><td>76%</td><td class="num">0.00875 / 0.00375</td></tr>
+      <tr><td>50</td><td class="num">0.00909</td><td>55%</td><td class="num">0.00636 / 0.00273</td></tr>
+      <tr><td>100</td><td class="num">0.00625</td><td>38%</td><td class="num">0.00438 / 0.00188</td></tr>
+    </tbody>
+  </table>
+  <blockquote>Top 5 ranks contribute almost identically. After rank 50, contributions are still non-trivial. After rank 100, they're down to ~38% of rank-1.</blockquote>
+
+  <h2>Algorithm (pseudocode)</h2>
+<pre>function RRF(rank_lists, weights, k=60):
+    # rank_lists: dict[ranker_name → list of doc_ids]   (rank 1 first)
+    # weights:    dict[ranker_name → float]
+    scores = {}
+    for name, rlist in rank_lists.items():
+        w = weights[name]
+        for rank, doc in enumerate(rlist, start=1):
+            scores[doc] = scores.get(doc, 0) + w / (k + rank)
+    return sorted(scores.items(), key=lambda x: -x[1])</pre>
+
+  <h2>How our <code>HybridSearch.search</code> does it</h2>
+<pre>vec_results  = vector_store.vector_search(query_vec, top_k=top_k * 2)
+bm25_results = bm25.search(query,              top_k=top_k * 2)
+scores = {}
+
+# Vector list: starts each chunk with vector contribution
+for rank, r in enumerate(vec_results):
+    cid = r["id"]
+    scores[cid] = {
+        "rrf_score":    VECTOR_WEIGHT / (RRF_K + rank + 1),
+        "vector_rank":  rank + 1,
+        "bm25_rank":    None,
+        "vector_score": 1 - r["score"],   # cosine in [0,1]
+    }
+
+# BM25 list: adds BM25 contribution (or starts a new entry)
+for rank, r in enumerate(bm25_results):
+    cid = r["doc_id"]
+    boost = BM25_WEIGHT / (RRF_K + rank + 1)
+    if cid in scores:
+        scores[cid]["rrf_score"] += boost
+        scores[cid]["bm25_rank"] = rank + 1
+    else:
+        scores[cid] = hit_from_bm25_only(cid, ..., rank + 1, boost)
+
+return sorted(scores.values(), key=lambda x: -x["rrf_score"])[:top_k]</pre>
+
+  <h2>Fusion algorithm comparison</h2>
+  <table>
+    <thead><tr><th>Algorithm</th><th>Needs normalized scores?</th><th>Handles missing chunks?</th><th>Complexity</th><th>Used by</th></tr></thead>
+    <tbody>
+      <tr><td><strong>RRF</strong></td><td class="ok">No (ranks only)</td><td class="ok">Yes (missing = 0)</td><td>O(N)</td><td>Elasticsearch, OpenSearch, Vespa, Weaviate, us</td></tr>
+      <tr><td>CombSUM</td><td class="no">Yes (min-max / z-score)</td><td class="no">Breaks if scale differs</td><td>O(N)</td><td>Older IR systems</td></tr>
+      <tr><td>CombMNZ</td><td class="no">Yes</td><td class="no">Breaks if scale differs</td><td>O(N)</td><td>Older IR systems</td></tr>
+      <tr><td>Condorcet</td><td class="ok">No</td><td class="ok">Yes</td><td>O(N²)</td><td>Rare; superseded by RRF</td></tr>
+      <tr><td>Linear blend</td><td class="no">Yes</td><td class="no">Breaks if scale differs</td><td>O(N)</td><td>Naive / first attempt</td></tr>
+    </tbody>
+  </table>
+
+  <h2>When to change <code>k</code></h2>
+  <div class="grid">
+    <div class="card">
+      <h4>Smaller k (10–30)</h4>
+      <p>Sharper top ranks. Top 1 dominates more. Use when:</p>
+      <ul>
+        <li>top_k is small (≤ 5)</li>
+        <li>You trust both rankers near-perfectly</li>
+        <li>You want to "punish" lower ranks harshly</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Larger k (100+)</h4>
+      <p>Flatter curve, more contribution from tail. Use when:</p>
+      <ul>
+        <li>top_k is large (≥ 50)</li>
+        <li>One ranker has a noisy long tail</li>
+        <li>You want "any presence in a list" to count</li>
+      </ul>
+    </div>
+  </div>
+  <p>Default <code>k=60</code> is fine for almost everything. Don't tune it before you've first tuned your actual rankers.</p>
+
+  <h2>When to change weights</h2>
+  <table>
+    <thead><tr><th>Corpus / query type</th><th>Suggested split</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td>Long-form prose (articles, books)</td><td>vec 0.5 / bm25 0.5</td><td>BM25 has many terms to work with</td></tr>
+      <tr><td>Short technical docs (TILs, API refs)</td><td>vec 0.7 / bm25 0.3</td><td>Vocab is small but semantic still wins</td></tr>
+      <tr><td>Code with identifiers / error codes</td><td>vec 0.3 / bm25 0.7</td><td>Exact matches matter more than semantics</td></tr>
+      <tr><td>General web search</td><td>vec 0.6 / bm25 0.4</td><td>Common starting point</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Common RRF failure modes</h2>
+  <ul>
+    <li><strong>Both rankers miss:</strong> the chunk just isn't there. Not RRF's fault.</li>
+    <li><strong>One ranker is broken:</strong> if cosine is returning random results, the RRF score is dominated by BM25 (and vice versa). Sanity-check each ranker independently before debugging RRF.</li>
+    <li><strong>Top-k too small in the inner calls:</strong> the <code>top_k * 2</code> fudge factor in our code exists because RRF can rescue a chunk ranked 7 in cosine but 1 in BM25. If you fetch only <code>top_k</code> from each, you exclude the rescue candidates.</li>
+    <li><strong>You try to use RRF score as a probability:</strong> it's not. It's a relative ranking signal. The absolute number 0.016 has no meaning across queries.</li>
+  </ul>
+
+  <h2>Glossary</h2>
+  <table>
+    <tr><th>Term</th><th>Definition</th></tr>
+    <tr><td><strong>Rank</strong></td><td>1-indexed position in a sorted list. Rank 1 = best.</td></tr>
+    <tr><td><strong>Ranker</strong></td><td>A retrieval system that produces a sorted list of candidates.</td></tr>
+    <tr><td><strong>Fusion</strong></td><td>Combining multiple rankers' outputs into one ranking.</td></tr>
+    <tr><td><strong>Reciprocal rank</strong></td><td><code>1 / rank</code>. The smaller the rank, the larger the reciprocal. RRF uses a smoothed version: <code>1 / (k + rank)</code>.</td></tr>
+    <tr><td><strong>Smoothing constant (k)</strong></td><td>Prevents the top ranks from completely dominating. Higher k = flatter curve.</td></tr>
+    <tr><td><strong>Rescue pattern</strong></td><td>When a chunk is high in one list and low (or missing) in another, RRF gives it a partial score from the high list. This is the main value of hybrid search.</td></tr>
+  </table>
+
+  <footer>
+    <p>RRF cheat sheet · Lesson 0004 · <a href="https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf">Cormack et al. 2009</a> · <a href="https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion">Elasticsearch RRF</a></p>
+  </footer>
+</main>
+</body>
+</html>

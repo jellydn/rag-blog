@@ -13,9 +13,11 @@ from sentence_transformers import SentenceTransformer
 from chunking import Document, MarkdownChunker, parse_chunk_id
 from config import (
     BM25_JSON,
+    BM25_THRESHOLD,
     BM25_WEIGHT,
     CHUNKS_DIR,
     CONTENT_DIR,
+    COSINE_THRESHOLD,
     DB_DIR,
     MODEL_NAME,
     RRF_K,
@@ -132,6 +134,19 @@ class BM25Index:
         self.doc_freqs = term_to_df
         self._built = True
         print(f"  BM25 index built: {self.total_docs} docs, {len(term_to_df)} unique terms")
+
+    def max_tf(self, token: str) -> int:
+        """Highest term-frequency of `token` across all indexed documents.
+
+        Used by tests/playgrounds to explain why a high-df term still
+        doesn't fire the adaptive-threshold suppression: a chunk with
+        many occurrences of the term pushes the top score above the
+        floor even when the per-match IDF is small.
+        """
+        return max(
+            (doc_tokens.count(token) for doc_tokens in self._doc_tokens),
+            default=0,
+        )
 
     def search(self, query: str, top_k: int = 10) -> list[dict]:
         if not self._built:
@@ -306,6 +321,8 @@ class HybridSearch:
         rrf_k: int = RRF_K,
         vector_weight: float = VECTOR_WEIGHT,
         bm25_weight: float = BM25_WEIGHT,
+        cosine_threshold: float = COSINE_THRESHOLD,
+        bm25_threshold: float = BM25_THRESHOLD,
     ):
         self.vector_store = vector_store
         self.bm25 = bm25_index
@@ -313,15 +330,86 @@ class HybridSearch:
         self.rrf_k = rrf_k
         self.vector_weight = vector_weight
         self.bm25_weight = bm25_weight
+        # Floor on cosine similarity for vector hits. Hits with
+        # cosine < threshold are dropped from the vector rank list before
+        # RRF; they can still surface via BM25 if ranked there.
+        self.cosine_threshold = cosine_threshold
+        # Floor on BM25 raw score for lexical hits. Drops chunks that
+        # scored on a single high-IDF token (a "single-token incidental
+        # match" — e.g. ".set({...}" matching the query word "set" via
+        # the JS method call) or on a pile of stopword-grade terms that
+        # barely nudge the score. Hits with score < threshold are dropped
+        # from the BM25 rank list before RRF; they can still surface via
+        # vector search if ranked there.
+        self.bm25_threshold = bm25_threshold
 
     def search(self, query: str, top_k: int = 5) -> tuple[list[dict], dict]:
         t0 = time.time()
         query_vec = self.embedder.embed_one(query)
         vec_results = self.vector_store.vector_search(query_vec, top_k=top_k * 2)
+        # Confidence: derived from the *raw* top vector hit's cosine, before
+        # any threshold filtering. Reflects how good the best match in the
+        # corpus is, not what survived post-filtering. Bands:
+        #   high   >= 0.5  (clear semantic match)
+        #   medium 0.3-0.5 (related but not on-target)
+        #   low    < 0.3   (no good match — the corpus is not on this topic)
+        top_cosine = (1 - float(vec_results[0]["score"])) if vec_results else 0.0
+        if top_cosine >= 0.5:
+            confidence = "high"
+        elif top_cosine >= 0.3:
+            confidence = "medium"
+        else:
+            confidence = "low"
+        # Apply cosine floor: drop vector hits the encoder considered
+        # essentially unrelated to the query. Score in vec_results is
+        # cosine *distance* (LanceDB convention), so cosine_similarity =
+        # 1 - score. Drop where similarity < threshold ⇒ score > 1-threshold.
+        # The floor is ADAPTIVE: if the *top* hit itself is below the
+        # threshold, the corpus has no good match for this query — in that
+        # case we suppress the filter and keep every hit so BM25+RRF can
+        # still do useful work. This prevents the "adversarial query wipes
+        # the vector list clean" failure mode without caller-side branching.
+        vec_dropped = 0
+        vec_threshold_suppressed = False
+        if self.cosine_threshold > 0 and vec_results:
+            top_cosine = 1 - float(vec_results[0].get("score", 0))
+            if top_cosine < self.cosine_threshold:
+                # No good match anywhere — let BM25 carry the load.
+                vec_threshold_suppressed = True
+            else:
+                before = len(vec_results)
+                vec_results = [
+                    r
+                    for r in vec_results
+                    if (1 - float(r.get("score", 0))) >= self.cosine_threshold
+                ]
+                vec_dropped = before - len(vec_results)
         t_vec = time.time() - t0
 
         t1 = time.time()
         bm25_results = self.bm25.search(query, top_k=top_k * 2)
+        # Apply BM25 raw-score floor: drop chunks that scored on noise
+        # (single high-IDF tokens, stopword piles) rather than on real
+        # lexical overlap. The floor is ADAPTIVE: if the *top* BM25 hit
+        # itself is below the threshold, the corpus has no good lexical
+        # match for this query — in that case we suppress the filter and
+        # keep every hit so vector search + RRF can still do useful work.
+        # This prevents the "adversarial query wipes the BM25 list clean"
+        # failure mode without caller-side branching, mirroring the
+        # cosine-threshold suppression logic above.
+        bm25_dropped = 0
+        bm25_threshold_suppressed = False
+        if self.bm25_threshold > 0 and bm25_results:
+            top_bm25 = float(bm25_results[0].get("score", 0))
+            if top_bm25 < self.bm25_threshold:
+                # No good lexical match anywhere — let vector carry the load.
+                bm25_threshold_suppressed = True
+            else:
+                before = len(bm25_results)
+                bm25_results = [
+                    r for r in bm25_results if float(r.get("score", 0)) >= self.bm25_threshold
+                ]
+                bm25_dropped = before - len(bm25_results)
         t_bm25 = time.time() - t1
 
         scores: dict[str, dict] = {}
@@ -355,6 +443,12 @@ class HybridSearch:
             "vector_search_ms": round(t_vec * 1000, 1),
             "bm25_search_ms": round(t_bm25 * 1000, 1),
             "total_ms": round((t_vec + t_bm25) * 1000, 1),
+            "vec_dropped_threshold": vec_dropped,
+            "vec_threshold_suppressed": vec_threshold_suppressed,
+            "bm25_dropped_threshold": bm25_dropped,
+            "bm25_threshold_suppressed": bm25_threshold_suppressed,
+            "confidence": confidence,
+            "top_cosine": round(top_cosine, 4),
         }
         return results, timing
 

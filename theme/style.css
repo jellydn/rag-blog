@@ -1,0 +1,387 @@
+/* site/style.css
+ * Shared stylesheet for lessons/*.html and reference/*.html.
+ * Hand-maintained at the repo root; copied to site/style.css by
+ * scripts/build_site.py alongside the HTML files. The source
+ * HTML files link to ../style.css (which resolves to
+ * site/style.css after the build).
+ */
+
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #4a4a4a;
+  --paper: #fbfaf7;
+  --accent: #b8541b;
+  --accent-soft: #f4e1d2;
+  --code-bg: #f4f1ea;
+  --rule: #e5e0d4;
+  --hl: #fff3a3;
+  --ok: #2e7d32;
+  --warn: #b8541b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Charter", "Iowan Old Style", "Georgia", "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 64px 32px 96px;
+}
+
+header.lesson-meta {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 24px;
+  margin-bottom: 32px;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+
+header.lesson-meta .tag {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin-right: 8px;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: 36px;
+  line-height: 1.2;
+  margin: 0 0 12px;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 22px;
+  margin: 48px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+h3 {
+  font-size: 17px;
+  margin: 28px 0 8px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+p { margin: 14px 0; }
+ul, ol { padding-left: 24px; }
+li { margin: 6px 0; }
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-soft);
+}
+a:hover { border-bottom-color: var(--accent); }
+
+code {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 14.5px;
+  background: var(--code-bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 14px;
+}
+
+.meta { color: var(--ink-soft); font-size: 13px; margin-bottom: 24px; }
+.lede { color: var(--ink-soft); font-size: 1.05rem; margin: 0 0 24px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14.5px;
+}
+th, td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule);
+}
+th { font-weight: 600; color: var(--ink-soft); }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+.card {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 10px 14px;
+}
+.card h4 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
+
+.math {
+  font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Georgia", serif;
+  font-style: italic;
+  background: #f7f3e8;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Centered math display: wraps an inline <span class="math"> in a
+ * block-level <p> to center it. Used by the 3 light-theme lessons
+ * (0001-0003) for the cosine / cost / BM25 formula lines.
+ * Preserves the inline-math look (the <span class="math"> provides
+ * the italic + light bg) -- this class only adds centering. */
+.formula-center {
+  text-align: center;
+}
+
+/* Centered formula display: a self-contained formula box with its
+ * own padding + bg + border-radius. Used by reference/bm25-cheatsheet
+ * for the BM25 formula at the top (no <span class="math"> wrapper --
+ * the class provides all the styling). */
+.formula-display {
+  text-align: center;
+  font-style: italic;
+  font-size: 16px;
+  padding: 12px;
+  background: var(--code-bg);
+  border-radius: 4px;
+}
+
+.num {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  color: var(--accent);
+}
+.ok { color: var(--ok); font-weight: 600; }
+.no { color: var(--warn); }
+
+.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 14px 18px;
+  margin: 24px 0;
+  border-radius: 0 4px 4px 0;
+}
+.callout p:first-child { margin-top: 0; }
+.callout p:last-child { margin-bottom: 0; }
+.callout.warn { border-left-color: #c62828; }  /* red — used by lessons 0004+ for warning callouts */
+.callout.tip  { border-left-color: var(--ok); }  /* green — used by lessons 0004+ for tip callouts */
+.callout strong { color: var(--accent); }       /* orange — preserves the lead-in emphasis Theme B gave to <strong> inside callouts (e.g. "The deeper problem:") */
+
+blockquote {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 14px 18px;
+  margin: 24px 0;
+  border-radius: 0 4px 4px 0;
+  color: var(--ink);
+}
+
+.exercise {
+  background: #f0ebde;
+  border: 1px dashed var(--accent);
+  padding: 18px 22px;
+  margin: 32px 0;
+  border-radius: 6px;
+}
+.exercise h3 {
+  color: var(--ink);
+  margin-top: 0;
+}
+
+.tag-anchor {
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-bottom: 4px;
+}
+
+.file-ref {
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.file-ref strong { color: var(--ink); }
+
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-right: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.toc {
+  background: var(--code-bg);
+  padding: 16px 20px;
+  border-radius: 8px;
+  margin: 24px 0;
+}
+.toc ol { margin: 8px 0 0 0; padding-left: 22px; }
+.toc li { margin: 4px 0; }
+
+.nav {
+  display: flex;
+  justify-content: space-between;
+  margin: 32px 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.nav a { border: none; }
+
+.check { color: var(--ok); }
+.cross { color: var(--warn); }
+
+.citations {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.citations li { margin: 8px 0; }
+
+hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 48px 0;
+}
+
+footer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+@media print {
+  body { font-size: 11pt; }
+  .page { max-width: none; padding: 24px; }
+  pre { font-size: 10pt; }
+  a { color: var(--ink); border-bottom: none; }
+}
+
+/* ---------- Index page (site/index.html) ----------
+ * Scoped under body.index so the lessons + references are unaffected.
+ * Loaded from site/index.html via <link rel="stylesheet" href="style.css">.
+ * Generated by scripts/build_site.py::build_index().
+ */
+body.index {
+  font-size: 16px;
+  line-height: 1.55;
+}
+body.index .page {
+  max-width: 800px;
+  padding: 48px 28px 64px;
+}
+body.index h1 {
+  font-size: 32px;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 8px;
+}
+body.index h2 {
+  font-size: 20px;
+  margin: 36px 0 12px;
+  color: var(--accent);
+  border-bottom: none;
+  padding-bottom: 0;
+}
+body.index .meta {
+  color: var(--ink-soft);
+  font-size: 14px;
+  margin: 0 0 24px;
+}
+body.index ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+body.index li {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin: 10px 0;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+body.index li:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+body.index a {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 17px;
+  border-bottom: none;
+}
+body.index a:hover {
+  color: var(--accent);
+  border-bottom-color: transparent;
+}
+body.index .desc {
+  color: var(--ink-soft);
+  font-size: 14px;
+  margin-top: 4px;
+  line-height: 1.45;
+}
+body.index .empty {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+body.index footer {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-style: normal;
+}
+@media (max-width: 600px) {
+  body.index .page { padding: 32px 18px; }
+  body.index h1 { font-size: 26px; }
+}
+
+@media print {
+  /* Re-applies the global @media print rules at body.index specificity
+   * so the index renders correctly when printed or saved as PDF.
+   * The global rules (body, .page) have specificity 0,0,1 which loses
+   * to body.index / body.index .page at 0,1,1. */
+  body.index { font-size: 11pt; }
+  body.index .page { max-width: none; padding: 24px; }
+}

@@ -32,3 +32,7 @@ Query timing reports measured vector and BM25 phases from `HybridSearch.search()
 
 - CLI depends on `server` module for initialization (acceptable for Day 1; could move to `rag_engine.py` later).
 - Importing `server` pulls FastAPI into CLI process (lightweight relative to the embedding model).
+
+## References
+
+- FastAPI streaming and API patterns: [references.md](./references.md).

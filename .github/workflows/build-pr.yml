@@ -1,0 +1,53 @@
+name: Build smoke check (PR)
+
+# Runs on pull requests targeting `day-2` or `main`. Builds the site and
+# runs the build-site smoke test to catch a broken build before it can
+# be merged. Does NOT deploy -- deployment is handled separately by
+# publish.yml on push to day-2/main/master.
+#
+# This is intentionally cheaper than publish.yml: no Pages configuration,
+# no artifact upload, no deploy step. The publish.yml workflow is the
+# source of truth for "is the site shippable?"; this workflow is the
+# fast pre-merge gate for "does the build still work?".
+
+on:
+  pull_request:
+    branches: [day-2, main]
+
+# Read-only access is enough -- no Pages / id-token needed.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & smoke check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # Don't persist the GITHUB_TOKEN in the local git config --
+        # this workflow is a read-only smoke check, never pushes
+        # back. Persisting the token widens the blast radius if
+        # any step in the job is compromised (same hardening as
+        # publish.yml).
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build site
+        # Runs the build with its real stdout visible in the log, so a
+        # build failure surfaces a clear error here rather than hiding
+        # inside the test's setUpClass capture.
+        run: python scripts/build_site.py
+
+      - name: Run build-site smoke test
+        # Re-runs the build in setUpClass, then asserts: clean exit, no
+        # stderr, site/index.html exists, every lesson + reference title
+        # fragment appears inside the rendered <a href=".../..."> card
+        # links (anchored to the markup so a description can't mask a
+        # broken title regex), and the card count is correct.
+        run: python -m unittest tests.test_build_site -v

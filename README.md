@@ -14,6 +14,7 @@ Indexes posts and Today-I-Learned notes from [productsway.com](https://productsw
 - **Markdown-aware chunking** — splits on `##` / `###`, respects code fences; stable chunk ids `slug:index`
 - **File-based index** — [LanceDB](https://lancedb.github.io/lancedb/) on disk + `bm25_data.json` (no DB server)
 - **FastAPI** — JSON search and Server-Sent Events (`/query/stream`), `/health`, `/stats`
+- **Agent mode** — `/agent/query` and `/agent/query/stream` add routing, planning, and reflection on top of retrieval
 - **CLI** — same hybrid engine as the API via lazy-loaded `get_hybrid()`
 - **Tooling** — [mise](https://mise.jdx.dev/), [uv](https://docs.astral.sh/uv/), [Ruff](https://docs.astral.sh/ruff/), [ty](https://docs.astral.sh/ty/), [prek](https://prek.j178.dev/), Docker Compose
 
@@ -35,7 +36,7 @@ uv sync
 
 With `mise activate` in your shell, entering the repo auto-activates `.venv` when `uv.lock` is present.
 
-Data defaults to `./data` (override with `RAG_BLOG_DATA`). See [Architecture decisions](./doc/adr/README.md).
+Data defaults to `./data` (override with `RAG_BLOG_DATA`). See [Architecture decisions](./doc/adr/README.md) and [Context7 references](./doc/adr/references.md).
 
 ## Usage
 
@@ -49,6 +50,7 @@ mise run serve
 # Query
 curl "http://localhost:8000/query?q=how+to+set+up+neovim+folding&top_k=5"
 curl -N "http://localhost:8000/query/stream?q=typescript+absolute+imports"
+curl "http://localhost:8000/agent/query?q=how+to+fix+session+id+unknown+with+socket.io"
 
 # CLI (no server)
 uv run python query.py "how to cherry pick from a pull request"
@@ -104,10 +106,11 @@ Scrape → Chunk → Embed → Store → Search
 
 ## Project status
 
-Day 1 of a 7-day AI engineer track — details in [DAY1_NOTES.md](./DAY1_NOTES.md).
+Day 2 of a 7-day AI engineer track — details in [DAY1_NOTES.md](./DAY1_NOTES.md) and [DAY2_NOTES.md](./DAY2_NOTES.md).
 
 - [x] Day 1 — Production RAG engine
-- [ ] Days 2–7 — agents, MCP, fine-tuning, observability, product, open stack
+- [ ] Day 2 — Advanced agent patterns
+- [ ] Days 3–7 — MCP, fine-tuning, observability, product, open stack
 
 ## References
 

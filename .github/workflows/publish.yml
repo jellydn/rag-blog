@@ -1,0 +1,101 @@
+name: Publish learning materials
+
+# Triggers:
+#   - push to any of the main branches when a published dir, the build
+#     script, or this workflow changes (no deploys on doc-only commits)
+#   - manual dispatch from the Actions tab (for ad-hoc previews)
+#
+# IMPORTANT first-time setup: Settings -> Pages -> Build and deployment
+# -> Source: "GitHub Actions". Without this, actions/deploy-pages will
+# fail with a permissions error.
+
+on:
+  push:
+    branches: [main, master, day-2]
+    paths:
+      # HTML content dirs (lessons, reference, learning-records) and the
+      # build infra (scripts, .github/workflows). Keep the smoke step's
+      # ALLOWED regex below in sync with the HTML content dirs.
+      - "lessons/**"
+      - "reference/**"
+      - "learning-records/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+# Allow the deploy-pages action to write to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time — never cancel an in-progress deploy
+# (avoid leaving Pages in a half-updated state).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & deploy site
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Don't persist the GITHUB_TOKEN in the local git config --
+          # this workflow only checks out the repo to build the site
+          # and never pushes back. Persisting the token widens the
+          # blast radius if any step in the job is compromised.
+          persist-credentials: false
+
+      - name: Check no new HTML directories appeared
+        run: |
+          set -euo pipefail
+          # Mirrors the on.push.paths HTML content dirs above
+          # (lessons, reference, learning-records). If you add a new
+          # HTML directory, update BOTH the path filter and this regex.
+          ALLOWED='^(lessons|reference|learning-records)/'
+          # Strip the leading "./" that `find .` adds so the ALLOWED regex
+          # matches the relative path. Use `sed` (not `find -printf %P`)
+          # for portability with BSD find as well as GNU find.
+          UNLISTED=$(find . -name '*.html' \
+            -not -path './.git/*' \
+            -not -path './site/*' \
+            -not -path './data/*' \
+            -not -path './.venv/*' \
+            -not -path './node_modules/*' \
+            -not -path './__pycache__/*' \
+            -not -path '*/__pycache__/*' \
+            | sed 's|^\./||' \
+            | grep -vE "$ALLOWED" || true)
+          if [ -n "$UNLISTED" ]; then
+            echo "::error::Found HTML file(s) outside the content allowlist. \
+          Update the on.push.paths HTML content dirs and the ALLOWED regex in this step."
+            echo "$UNLISTED"
+            exit 1
+          fi
+          echo "OK: all HTML files are in the allowlist"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build site
+        run: python scripts/build_site.py
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

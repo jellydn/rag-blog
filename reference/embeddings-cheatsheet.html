@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Embeddings Cheat Sheet</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<main class="page">
+
+<h1>Embeddings Cheat Sheet</h1>
+<p class="meta">Quick reference for the rag-blog stack. Pair with <code>lessons/0001-embeddings-vector-of-meaning.html</code>.</p>
+
+<h2>Core facts</h2>
+<table>
+  <tr><th>Property</th><th>Value</th></tr>
+  <tr><td>Model</td><td><code>all-MiniLM-L6-v2</code></td></tr>
+  <tr><td>Architecture</td><td>6-layer transformer encoder, mean-pooled</td></tr>
+  <tr><td>Output dimension</td><td>384</td></tr>
+  <tr><td>Size on disk</td><td>~80 MB</td></tr>
+  <tr><td>Similarity function</td><td>Cosine (vectors are pre-normalized, so it's a dot product)</td></tr>
+  <tr><td>Hardware</td><td>CPU (no GPU needed for our scale)</td></tr>
+  <tr><td>License</td><td>Apache 2.0</td></tr>
+</table>
+
+<h2>The mental model in one line</h2>
+<p>Text in → list of 384 numbers out, where <strong>similar meaning → nearby direction</strong>.</p>
+
+<h2>Three similarity functions</h2>
+<table>
+  <tr><th>Function</th><th>Formula</th><th>Range</th><th>When to use</th></tr>
+  <tr>
+    <td>Cosine similarity</td>
+    <td class="math">(A · B) / (‖A‖ · ‖B‖)</td>
+    <td>[-1, 1]</td>
+    <td>Default for normalized text embeddings. Insensitive to magnitude.</td>
+  </tr>
+  <tr>
+    <td>Dot product</td>
+    <td class="math">A · B</td>
+    <td>(-∞, ∞)</td>
+    <td>Equivalent to cosine <em>only if</em> vectors are unit-length (our case).</td>
+  </tr>
+  <tr>
+    <td>Euclidean distance</td>
+    <td class="math">‖A - B‖</td>
+    <td>[0, ∞)</td>
+    <td>Useful when you care about magnitude. LanceDB uses this by default.</td>
+  </tr>
+</table>
+
+<h2>The four key lines of code</h2>
+
+<h3>Load the model</h3>
+<pre><code>self.model = SentenceTransformer(model_name)   # rag_pipeline.py
+dim = self.model.get_embedding_dimension()     # → 384</code></pre>
+
+<h3>Encode a batch (used at ingest time)</h3>
+<pre><code>embeddings = self.model.encode(
+    texts,                       # list[str]
+    show_progress_bar=True,
+    normalize_embeddings=True    # ← important
+)</code></pre>
+
+<h3>Encode a single string (used at query time)</h3>
+<pre><code>vec = self.model.encode([text], normalize_embeddings=True)[0].tolist()</code></pre>
+
+<h3>Find the closest chunks</h3>
+<pre><code>results = lancedb_table.search(query_vec).metric("cosine").limit(top_k).to_list()</code></pre>
+
+<h2>Common gotchas</h2>
+<div class="grid">
+  <div class="card">
+    <strong>Forgetting <code>normalize_embeddings=True</code></strong><br>
+    If you toggle it off, cosine similarity and dot product no longer agree. Pick one and stay consistent.
+  </div>
+  <div class="card">
+    <strong>Comparing across models</strong><br>
+    Vectors from <code>MiniLM</code> and vectors from <code>mpnet</code> are not in the same space. Never mix them.
+  </div>
+  <div class="card">
+    <strong>Dimensionality mismatch</strong><br>
+    If you swap models and the dimension changes (e.g. MiniLM 384 → mpnet 768), you must re-ingest the whole index.
+  </div>
+  <div class="card">
+    <strong>"Top-K doesn't include what I want"</strong><br>
+    Almost always a chunking problem, not an embedding problem. Re-check <code>chunking.py</code>.
+  </div>
+</div>
+
+<h2>Where to look in the codebase</h2>
+<table>
+  <tr><th>Concept</th><th>File · Symbol</th></tr>
+  <tr><td>Model choice</td><td><code>config.py</code> · <code>MODEL_NAME</code></td></tr>
+  <tr><td>Loading + dimension</td><td><code>rag_pipeline.py</code> · <code>Embedder.__init__</code></td></tr>
+  <tr><td>Batch encoding (ingest)</td><td><code>rag_pipeline.py</code> · <code>Embedder.embed</code></td></tr>
+  <tr><td>Single encoding (query)</td><td><code>rag_pipeline.py</code> · <code>Embedder.embed_one</code></td></tr>
+  <tr><td>Vector storage</td><td><code>rag_pipeline.py</code> · <code>VectorStore</code> · <code>_create_table</code></td></tr>
+  <tr><td>Vector search</td><td><code>rag_pipeline.py</code> · <code>VectorStore.vector_search</code></td></tr>
+  <tr><td>Hybrid fusion</td><td><code>rag_pipeline.py</code> · <code>HybridSearch.search</code></td></tr>
+</table>
+
+<h2>Useful one-liners</h2>
+<pre><code># Embed a single string
+vec = embedder.embed_one("neovim folding")
+
+# Embed many
+vecs = embedder.embed(["neovim folding", "vim folding", "folding laundry"])
+
+# Inspect a vector
+print(vecs[0].shape)              # (384,)
+print(np.linalg.norm(vecs[0]))    # ~1.0 if normalized
+print(vecs[0][:5])                # first 5 floats
+
+# Cosine similarity (our convention)
+def cos(a, b): return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))</code></pre>
+
+<h2>Glossary</h2>
+<table>
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td>Embedding</td><td>A list of floats representing a piece of text. "Vector" and "embedding" are used interchangeably in this codebase.</td></tr>
+  <tr><td>Encoder</td><td>The neural network that produces embeddings. Ours is transformer-based.</td></tr>
+  <tr><td>Token</td><td>Sub-word unit the encoder reads. ~1 token ≈ 4 characters of English.</td></tr>
+  <tr><td>Mean pooling</td><td>How we collapse a sequence of token vectors into one vector (averaging).</td></tr>
+  <tr><td>Cosine similarity</td><td>The angle between two vectors. We use it as our "how similar" score.</td></tr>
+  <tr><td>Cosine distance</td><td><code>1 - cosine_similarity</code>. This is what LanceDB returns by default. We convert back via <code>vector_score = 1 - score</code>.</td></tr>
+  <tr><td>Unit vector / normalized</td><td>A vector of length 1. With these, cosine = dot product.</td></tr>
+  <tr><td>Dimension</td><td>How many floats are in the vector. 384 for our model.</td></tr>
+</table>
+
+</main>
+</body>
+</html>

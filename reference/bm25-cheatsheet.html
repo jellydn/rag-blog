@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BM25 Cheat Sheet</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<main class="page">
+
+<h1>BM25 Cheat Sheet</h1>
+<p class="meta">Quick reference. Pair with <code>lessons/0003-bm25-keyword-search-still-matters.html</code>.</p>
+
+<h2>The formula</h2>
+<p>For a single query <code>q</code> and document <code>D</code>:</p>
+<p class="formula-display">
+score(q, D) = Σ<sub>t ∈ q</sub> IDF(t) · ( tf(t, D)·(k1+1) / (tf(t,D) + k1·(1 - b + b·|D|/avgdl)) + δ )
+</p>
+
+<p>Three pieces:</p>
+<ul>
+  <li><strong>tf(t, D)</strong> — how many times term <code>t</code> appears in <code>D</code></li>
+  <li><strong>IDF(t) = log((N - df(t) + 0.5) / (df(t) + 0.5) + 1)</strong> — how rare <code>t</code> is in the corpus</li>
+  <li><strong>|D|/avgdl</strong> — length penalty</li>
+</ul>
+
+<h2>Our implementation: BM25+</h2>
+<table>
+  <tr><th>Param</th><th>Default</th><th>What it controls</th></tr>
+  <tr><td><code>k1</code></td><td>1.5</td><td>TF saturation. Higher = TF matters more (asymptote grows).</td></tr>
+  <tr><td><code>b</code></td><td>0.75</td><td>Length normalization. Higher = longer docs penalized more.</td></tr>
+  <tr><td><code>delta</code></td><td>1.0</td><td>BM25+ floor. 0 = plain BM25. Higher = bigger boost for any hit.</td></tr>
+</table>
+
+<h2>The four key code blocks</h2>
+
+<h3>Constructor</h3>
+<pre><code>self.k1 = 1.5
+self.b = 0.75
+self.delta = 1.0
+self._built = False</code></pre>
+
+<h3>Tokenizer</h3>
+<pre><code>def _tokenize(self, text: str) -> list[str]:
+    return re.findall(r"\b[a-zA-Z][a-zA-Z0-9#]{1,50}\b", text.lower())</code></pre>
+<p>Case-folded, word-boundary, letter-prefixed, length 2–51, includes <code>#</code>.</p>
+
+<h3>Index build</h3>
+<pre><code>self._doc_tokens = [self._tokenize(t) for t in texts]
+self.doc_lengths = [len(toks) for toks in self._doc_tokens]
+self.avg_doc_length = sum(self.doc_lengths) / max(self.total_docs, 1)
+
+# Per-document frequency: each term counted ONCE per doc, even if repeated
+for toks in self._doc_tokens:
+    for token in set(toks):
+        term_to_df[token] = term_to_df.get(token, 0) + 1
+self.doc_freqs = term_to_df</code></pre>
+
+<h3>Search</h3>
+<pre><code>idf = np.log((n - df + 0.5) / (df + 0.5) + 1.0)   # ≥ 0 always
+denom = tf + self.k1 * (1 - self.b + self.b * dl / self.avg_doc_length)
+score = idf * (tf * (self.k1 + 1) / denom + self.delta)</code></pre>
+
+<h2>TF saturation intuition</h2>
+<p>For <code>k1=1.5</code>, the per-term score contribution as TF grows:</p>
+<table>
+  <tr><th>tf</th><th>Score contribution (k1=1.5, δ=1.0, IDF=1)</th></tr>
+  <tr><td>0</td><td>0 (skipped)</td></tr>
+  <tr><td>1</td><td>1.60</td></tr>
+  <tr><td>2</td><td>2.00</td></tr>
+  <tr><td>5</td><td>2.46</td></tr>
+  <tr><td>10</td><td>2.65</td></tr>
+  <tr><td>50</td><td>2.81</td></tr>
+  <tr><td>∞ (asymptote)</td><td>2.50 + δ = 3.50 (BM25+) or 2.50 (BM25)</td></tr>
+</table>
+<p>Notice BM25+ has no true asymptote — the +δ adds a constant. That's the floor.</p>
+
+<h2>Embeddings vs BM25</h2>
+<div class="grid">
+  <div class="card">
+    <strong>Embeddings win on:</strong>
+    <ul>
+      <li>Paraphrases ("configure folding" ≈ "set up code folding")</li>
+      <li>Semantic queries (no keyword overlap)</li>
+      <li>Cross-lingual matching</li>
+    </ul>
+  </div>
+  <div class="card">
+    <strong>BM25 wins on:</strong>
+    <ul>
+      <li>Exact technical terms ("neovim", "<code>--watch</code>")</li>
+      <li>Code identifiers ("<code>socket.id</code>")</li>
+      <li>Brand names, version numbers, error codes</li>
+      <li>Speed at scale (no GPU, no model load)</li>
+      <li>Out-of-corpus terms (predictable behavior)</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Threshold filter (production noise control)</h2>
+
+<p><code>BM25_THRESHOLD = 1.0</code> (in <code>config.py</code>) — the floor on BM25 raw score below which a hit is dropped from the BM25 rank list before it reaches RRF. Defense against two real failure modes:</p>
+<ul>
+  <li><strong>Single-token incidental matches.</strong> A chunk containing the word "set" (e.g. <code>.set({...})</code> in a JS code block) gets a non-zero BM25 score for the query "how to set up neovim folding" — but the chunk isn't actually about Neovim. A floor around 1.0 filters most of these.</li>
+  <li><strong>Stopword piles.</strong> A chunk that mentions 20 common words but none of the actual rare query terms can still score above 0. The floor cuts them off.</li>
+</ul>
+
+<h3>The rule</h3>
+<pre><code>if score >= BM25_THRESHOLD:
+    keep
+else:
+    drop   # can still surface via vector search if ranked there</code></pre>
+<p><code>BM25_THRESHOLD = 0.0</code> disables the filter (backward-compat default).</p>
+
+<h3>Adaptive override — the "no good match" case</h3>
+<p>The hard floor has its own failure mode: an adversarial query with zero corpus overlap would have its BM25 list silently wiped clean. The adaptive override detects this and keeps every hit so vector search + RRF can still do useful work. Mirrors the cosine-threshold logic in <code>HybridSearch.search</code> exactly:</p>
+<pre><code>if self.bm25_threshold > 0 and bm25_results:
+    top_bm25 = float(bm25_results[0].get("score", 0))
+    if top_bm25 < self.bm25_threshold:
+        # No good lexical match anywhere — let vector carry the load.
+        bm25_threshold_suppressed = True   # every BM25 hit kept as-is
+    else:
+        # apply the normal `>=` filter
+        ...</code></pre>
+<p>When the top BM25 hit itself is below the floor, the filter is suppressed and every hit is kept. <code>bm25_threshold_suppressed</code> in the timing dict records that the override fired.</p>
+
+<h3>Timing dict fields</h3>
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td><code>bm25_dropped_threshold</code></td><td>Number of BM25 hits dropped by the floor this query (0 when suppression fired).</td></tr>
+  <tr><td><code>bm25_threshold_suppressed</code></td><td>True if the adaptive override fired — top BM25 hit was below the floor, so the filter was suppressed.</td></tr>
+</table>
+
+<h3>Symmetric with the cosine threshold</h3>
+<p>The cosine and BM25 thresholds are now <strong>symmetric</strong>: both peek at the top hit, suppress the filter if it's below the floor, otherwise apply the filter normally. Both rank lists are noise-filtered symmetrically, and both fail gracefully when the corpus has no good match for the query. The two suppression flags (<code>vec_threshold_suppressed</code> / <code>bm25_threshold_suppressed</code>) tell operators exactly which side had nothing.</p>
+<p>See <a href="../lessons/0003-bm25-keyword-search-still-matters.html#7-the-threshold-filter-when-quotbelow-floorquot-means-quotno-real-matchquot">Lesson 0003 §7</a> for the production-noise-control coda — two failure modes (zero overlap vs weak overlap), the live sweep data behind the numbers, and tuning advice.</p>
+
+<h2>Production decisions</h2>
+<table>
+  <tr><th>Choice</th><th>Default</th><th>When to change</th></tr>
+  <tr><td>Tokenizer</td><td>Word boundary + lowercase</td><td>Add stemming for morphological languages; keep current for code/identifiers.</td></tr>
+  <tr><td>Stop words</td><td>None removed (IDF handles them)</td><td>Remove if corpus is huge and TF tables bloat.</td></tr>
+  <tr><td>k1</td><td>1.5</td><td>Lower to ~1.2 for short, terse docs; raise to ~2.0 for long articles with key terms repeated.</td></tr>
+  <tr><td>b</td><td>0.75</td><td>Lower to 0.3 for uniformly-sized docs (TILs, tweets); raise to 0.9 for mixed-size corpus.</td></tr>
+  <tr><td>delta</td><td>1.0 (BM25+)</td><td>Set to 0 for plain BM25. Set higher for very long docs with short queries.</td></tr>
+</table>
+
+<h2>Complexity</h2>
+<table>
+  <tr><th>Phase</th><th>Cost</th></tr>
+  <tr><td>Index build</td><td>O(N · L) where L = avg doc length (tokenization + DF count)</td></tr>
+  <tr><td>Query</td><td>O(|q| · N · L) — for each query term, scan every doc counting occurrences. Hot path is <code>toks.count(token)</code>.</td></tr>
+  <tr><td>Storage</td><td>O(N · L) — the tokenized docs are kept in memory.</td></tr>
+</table>
+<p>For 100k docs × 200 tokens: ~20M ints in memory. Fine. For 10M docs, switch to a real inverted index (tantivy, Lucene) where cost is O(|q| · matches), not O(|q| · N · L).</p>
+
+<h2>Where to look in the codebase</h2>
+<table>
+  <tr><th>Concept</th><th>File · Symbol</th></tr>
+  <tr><td>Index class</td><td><code>rag_pipeline.py</code> · <code>BM25Index</code></td></tr>
+  <tr><td>Hyperparameters</td><td><code>rag_pipeline.py</code> · <code>BM25Index.__init__</code></td></tr>
+  <tr><td>Tokenizer</td><td><code>rag_pipeline.py</code> · <code>BM25Index._tokenize</code></td></tr>
+  <tr><td>Build (DF computation)</td><td><code>rag_pipeline.py</code> · <code>BM25Index.add_documents</code></td></tr>
+  <tr><td>Query (the formula)</td><td><code>rag_pipeline.py</code> · <code>BM25Index.search</code></td></tr>
+  <tr><td>Save/load</td><td><code>rag_pipeline.py</code> · <code>to_json_dict</code> / <code>from_json_dict</code></td></tr>
+  <tr><td>Hybrid fusion</td><td><code>rag_pipeline.py</code> · <code>HybridSearch.search</code> (next lesson)</td></tr>
+  <tr><td>Threshold floor (default)</td><td><code>config.py</code> · <code>BM25_THRESHOLD = 1.0</code></td></tr>
+  <tr><td>Threshold filter (adaptive)</td><td><code>rag_pipeline.py</code> · <code>HybridSearch.search</code> (BM25 block)</td></tr>
+  <tr><td>Suppression signal</td><td><code>timing["bm25_threshold_suppressed"]</code> · <code>timing["bm25_dropped_threshold"]</code></td></tr>
+</table>
+
+<h2>Glossary</h2>
+<table>
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td>TF (term frequency)</td><td>How many times a term appears in a document.</td></tr>
+  <tr><td>DF (document frequency)</td><td>How many documents contain a term (at least once).</td></tr>
+  <tr><td>IDF (inverse document frequency)</td><td>log((N - df + 0.5) / (df + 0.5) + 1). Higher for rarer terms.</td></tr>
+  <tr><td>TF saturation</td><td>Diminishing returns: the 50th occurrence of "neovim" matters less than the 1st.</td></tr>
+  <tr><td>Length normalization</td><td>Penalizing long documents for the same TF, since they hit terms by chance.</td></tr>
+  <tr><td>BM25+</td><td>BM25 with a +δ lower bound. Avoids 0 scores for any document containing a term.</td></tr>
+  <tr><td>Token</td><td>The unit of indexing. In our code: word-bounded alphanumeric + <code>#</code>, length 2–51.</td></tr>
+  <tr><td>Stemming</td><td>Reducing tokens to roots ("running" → "run"). We don't do this.</td></tr>
+  <tr><td>Stop words</td><td>Common words ("the", "is"). We don't filter them; IDF downweights them.</td></tr>
+  <tr><td>Threshold (BM25)</td><td>Raw-score floor; hits with <code>score &lt; BM25_THRESHOLD</code> are dropped from the BM25 rank list before RRF. Default 1.0; set to 0.0 to disable.</td></tr>
+  <tr><td>Adaptive suppression</td><td>If the top BM25 hit's score is itself below the floor, the filter is suppressed and every hit is kept. Prevents "adversarial query wipes BM25 list clean". Symmetric to the cosine-threshold suppression.</td></tr>
+</table>
+
+</main>
+</body>
+</html>

@@ -20,6 +20,14 @@ sync:
 test:
     uv run python -m unittest discover -s tests -v
 
+# CSS lint (balanced @media blocks, body.index print present,
+# no inline <style>/style= in source HTML). Stdlib-only. Uses
+# `uv run` for interpreter consistency with the other recipes
+# (test, lint, fmt) so a stale system Python can't silently
+# produce different results from the managed venv.
+css-lint:
+    uv run python scripts/css_lint.py
+
 # Ruff lint
 lint:
     uv run ruff check .
@@ -36,8 +44,8 @@ fmt-check:
 typecheck:
     uv run ty check
 
-# Lint + format + types + tests
-check: lint fmt-check typecheck test
+# Lint + format + types + tests + CSS lint
+check: lint fmt-check typecheck test css-lint
 
 # Install git hooks from prek.toml
 prek-install:

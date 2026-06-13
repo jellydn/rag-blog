@@ -29,3 +29,7 @@ Day 1 goal: a production-*style* RAG stack that runs locally and on a simple VPS
 - LanceDB + embedding model still imply non-trivial disk and first-run download.
 - Full re-ingest required when chunking or id scheme changes; no incremental versioning in Day 1.
 - JSON stores full chunk text twice (LanceDB + BM25 file) for simplicity.
+
+## References
+
+- LanceDB embedded connect/search: [references.md](./references.md).
