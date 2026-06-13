@@ -167,6 +167,9 @@ th { font-weight: 600; color: var(--ink-soft); }
 }
 .callout p:first-child { margin-top: 0; }
 .callout p:last-child { margin-bottom: 0; }
+.callout.warn { border-left-color: #c62828; }  /* red — used by lessons 0004+ for warning callouts */
+.callout.tip  { border-left-color: var(--ok); }  /* green — used by lessons 0004+ for tip callouts */
+.callout strong { color: var(--accent); }       /* orange — preserves the lead-in emphasis Theme B gave to <strong> inside callouts (e.g. "The deeper problem:") */
 
 blockquote {
   border-left: 3px solid var(--accent);
