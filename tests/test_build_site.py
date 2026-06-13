@@ -17,6 +17,7 @@ SITE_INDEX = ROOT / "site" / "index.html"
 # at top of file) -- the import MUST come after ROOT is defined.
 sys.path.insert(0, str(ROOT / "scripts"))
 from css_lint import (  # noqa: E402
+    INLINE_STYLE_TAG,
     check_no_inline_styles,
     check_theme_css,
 )
@@ -137,13 +138,16 @@ class TestBuildSite(unittest.TestCase):
 
         # Build-output check: rglob catches every HTML under site/
         # including any new top-level files someone might add in the
-        # future.
+        # future. Reuses INLINE_STYLE_TAG from the CSS lint so the
+        # test and the lint share the same regex (single source of
+        # truth -- eliminates the last regex-duplication between
+        # the test and the lint).
         site_dir = ROOT / "site"
         html_files = sorted(site_dir.rglob("*.html"))
         inline_style_files = []
         for p in html_files:
             text = p.read_text(encoding="utf-8")
-            if "<style>" in text or "<style " in text:
+            if INLINE_STYLE_TAG.search(text):
                 inline_style_files.append(str(p.relative_to(ROOT)))
         self.assertEqual(
             inline_style_files,
