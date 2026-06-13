@@ -77,17 +77,45 @@ INLINE_STYLE_ATTR = re.compile(r"""style\s*=\s*['"]""", re.IGNORECASE)
 # `@media print { @supports (...) { ... } }`) still matches. CSS rules
 # inside use braces, so naive `[^}]*` would fail; the alternation
 # `(?:[^{}]|\{[^{}]*\})*` handles one level of nesting.
+#
+# Print-specific blocks are derived from this regex (filter for
+# blocks containing the word `print` in the header) -- one regex
+# covers both the balanced-block check and the print-block check.
 _AT_MEDIA_BLOCK = re.compile(
     r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}",
 )
-# Same regex but requires `print` in the media query.
-_AT_MEDIA_PRINT_BLOCK = re.compile(
-    r"@media[^{]*print[^{]*\{(?:[^{}]|\{[^{}]*\})*\}",
-)
+
+# Public API: the check functions + the main entry point + the
+# regex constants other modules might import. Underscore-prefixed
+# names (the @media block regexes) are internal implementation
+# details and not part of the public API.
+__all__ = [
+    "INLINE_STYLE_TAG",
+    "INLINE_STYLE_ATTR",
+    "check_theme_css",
+    "check_no_inline_styles",
+    "check_selector_specificity",
+    "main",
+]
 
 
 def check_theme_css() -> list[str]:
-    """Check theme/style.css for balanced @media blocks + body.index print."""
+    """Check theme/style.css for balanced @media blocks + body.index print.
+
+    Returns a list of error messages (empty if all checks pass).
+    Possible errors:
+      * "missing: theme/style.css" -- the source file doesn't exist
+      * "... has N @media keyword(s) but only M balanced block(s) ..." --
+        an @media block is unclosed or malformed (the balanced-brace
+        regex silently skips it, so this check exists to catch it)
+      * "... @media block N has unbalanced braces ..." -- sanity check
+        (the regex guarantees this, so a failure means the regex is
+        buggy)
+      * "... has no @media print block containing the required
+        body.index + body.index .page rules ..." -- the index-specific
+        print block is missing, so the index will print at the screen
+        layout instead of the print layout
+    """
     if not THEME_CSS.exists():
         return [f"missing: {THEME_CSS.relative_to(ROOT)}"]
 
@@ -131,8 +159,9 @@ def check_theme_css() -> list[str]:
     # + body.index .page rules. The global @media print block (for
     # lessons + references) has only body / .page / pre / a selectors;
     # the index needs its own block because the global rules lose to
-    # body.index at specificity 0,0,1 vs 0,1,1.
-    print_blocks = _AT_MEDIA_PRINT_BLOCK.findall(text)
+    # body.index at specificity 0,0,1 vs 0,1,1. Derives the print
+    # blocks from all_media_blocks (no need for a second regex).
+    print_blocks = [b for b in all_media_blocks if "print" in b]
     has_index_print = any(
         "body.index" in block and "body.index .page" in block for block in print_blocks
     )
@@ -147,7 +176,16 @@ def check_theme_css() -> list[str]:
 
 
 def check_no_inline_styles() -> list[str]:
-    """Check source HTML for inline <style> blocks + style= attributes."""
+    """Check source HTML for inline <style> blocks + style= attributes.
+
+    Walks lessons/*.html and reference/*.html (the source files, not
+    the build output in site/) and reports any file that contains:
+      * an inline <style> block (should link to ../style.css instead)
+      * an inline style="..." or style='...' attribute (bypasses the
+        stylesheet, specificity 1,0,0,0 -- hard to override)
+
+    Returns a list of error messages (empty if no violations).
+    """
     errors: list[str] = []
     for src_dir in (LESSONS_SRC, REFERENCE_SRC):
         if not src_dir.is_dir():
@@ -168,10 +206,63 @@ def check_no_inline_styles() -> list[str]:
     return errors
 
 
+def check_selector_specificity() -> list[str]:
+    """Flag CSS selectors with more than 4 classes in theme/style.css.
+
+    A rough specificity heuristic: a selector with 5+ classes is
+    almost certainly over-specific and hard to override. The
+    project's existing selectors are all 0-2 classes (verified
+    manually -- e.g. body.index is 1 class, .callout.warn is 2
+    classes), so a threshold of 4 gives comfortable headroom while
+    catching egregious cases like `.foo .bar .baz .qux .quux`.
+
+    The check:
+      * Strips CSS comments first (a comment mentioning a class
+        selector would falsely inflate the count).
+      * Finds every selector block (text before `{`), splits on
+        `,` to handle comma-separated selectors.
+      * Skips @media headers (they have no `.` and aren't real
+        selectors).
+      * Counts `.` characters across combinators (space, >, ~, +)
+        as a rough class count. Doesn't distinguish classes from
+        other `.`-prefixed tokens (none exist in standard CSS), but
+        is good enough for the threshold check.
+
+    Returns a list of error messages (empty if no violations).
+    """
+    if not THEME_CSS.exists():
+        return []
+    errors: list[str] = []
+    text = THEME_CSS.read_text(encoding="utf-8")
+    rel = THEME_CSS.relative_to(ROOT)
+    text_no_comments = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+
+    # Find every selector (text before `{`). The `(?:[^{}]|\{[^{}]*\})*`
+    # alternation would over-match for selector text (it allows `{`),
+    # so we keep it simple: match any non-brace text before a `{`.
+    pattern = re.compile(r"([^{}]+)\{")
+    for match in pattern.finditer(text_no_comments):
+        selectors_text = match.group(1)
+        for selector in selectors_text.split(","):
+            selector = selector.strip()
+            if not selector or selector.startswith("@"):
+                continue
+            # Count class tokens across combinators (rough heuristic).
+            class_count = sum(part.count(".") for part in re.split(r"\s+|>|~|\+", selector))
+            if class_count > 4:
+                errors.append(
+                    f"{rel} selector has {class_count} classes "
+                    f"(specificity > (0,4,0) -- hard to override): "
+                    f"{selector!r}"
+                )
+    return errors
+
+
 def main() -> int:
     theme_errors = check_theme_css()
     html_errors = check_no_inline_styles()
-    all_errors = theme_errors + html_errors
+    specificity_errors = check_selector_specificity()
+    all_errors = theme_errors + html_errors + specificity_errors
 
     if all_errors:
         print("CSS lint FAILED:", file=sys.stderr)

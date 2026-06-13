@@ -10,6 +10,17 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD_SCRIPT = ROOT / "scripts" / "build_site.py"
 SITE_INDEX = ROOT / "site" / "index.html"
 
+# Import the CSS lint so the tests share the same regex + logic as
+# the prek hook (the lint is the single source of truth for "valid
+# CSS"). The lint lives in scripts/ (not a package), so we add it
+# to sys.path. The noqa is for ruff E402 (module-level import not
+# at top of file) -- the import MUST come after ROOT is defined.
+sys.path.insert(0, str(ROOT / "scripts"))
+from css_lint import (  # noqa: E402
+    check_no_inline_styles,
+    check_theme_css,
+)
+
 # One stable substring per lesson / reference title. If the build script's
 # title-extraction regex ever stops matching (tag typo, encoding change, etc.)
 # the corresponding fragment disappears from the rendered card link and one
@@ -102,17 +113,31 @@ class TestBuildSite(unittest.TestCase):
         # <style> in any of these files would cause a silent style drift
         # that the browser would render without raising an error -- this
         # test catches it at build time.
+        #
+        # Checks BOTH the source files (via the CSS lint) AND the build
+        # output (via a direct rglob). The source check is the
+        # primary check; the build-output check is a backstop in case
+        # the source check is bypassed (e.g., someone directly edits
+        # site/).
+        # Source check: delegate to the CSS lint (single source of truth).
+        source_errors = check_no_inline_styles()
+        self.assertEqual(
+            source_errors,
+            [],
+            "source HTML files contain inline <style> blocks or "
+            f"style= attributes: {source_errors}",
+        )
+
         if not self._build_succeeded():
             self.fail(
                 f"build did not succeed (exit {self.build_returncode}); "
-                f"cannot check for inline <style> blocks: {self.build_stderr}"
+                f"cannot check build output for inline <style> blocks: "
+                f"{self.build_stderr}"
             )
 
-        # site/ is the build output, not the source -- the source HTML
-        # files in lessons/ and reference/ MAY contain inline <style>
-        # before the build (they don't anymore, but the test is for the
-        # build output). rglob catches every HTML under site/ including
-        # any new top-level files someone might add in the future.
+        # Build-output check: rglob catches every HTML under site/
+        # including any new top-level files someone might add in the
+        # future.
         site_dir = ROOT / "site"
         html_files = sorted(site_dir.rglob("*.html"))
         inline_style_files = []
@@ -123,9 +148,7 @@ class TestBuildSite(unittest.TestCase):
         self.assertEqual(
             inline_style_files,
             [],
-            "the following HTML files contain an inline <style> block "
-            "(should link to the shared stylesheet instead): "
-            f"{inline_style_files}",
+            f"build output contains inline <style> blocks: {inline_style_files}",
         )
 
     def test_theme_css_is_copied_to_site(self):
@@ -165,47 +188,18 @@ class TestBuildSite(unittest.TestCase):
         # instead of the print layout (11pt font, no max-width). This
         # test catches that.
         #
-        # This test only reads theme/style.css (the source) and does
-        # not need the build to have run, so it works even if
-        # _build_succeeded() returns False.
-        theme_css_path = ROOT / "theme" / "style.css"
-        self.assertTrue(
-            theme_css_path.exists(),
-            f"missing source: {theme_css_path}",
-        )
-        theme_css = theme_css_path.read_text(encoding="utf-8")
-
-        # Extract every @media print { ... } block. The regex handles
-        # both the simple form (@media print {) and the conditional
-        # form (@media print and (...)) in case the style evolves.
-        # No nested braces inside @media print blocks (CSS rules use
-        # braces, but the regex balances one level of nesting just in
-        # case future CSS adds a nested at-rule).
-        print_blocks = re.findall(
-            r"@media[^{]*print[^{]*\{(?:[^{}]|\{[^{}]*\})*\}",
-            theme_css,
-        )
-        self.assertTrue(
-            print_blocks,
-            f"{theme_css_path.relative_to(ROOT)} has no @media print "
-            "block at all (the index + lessons + references will all "
-            "print at the screen layout)",
-        )
-
-        # At least one print block must contain the body.index + body
-        # .index .page rules so the index prints correctly. The global
-        # @media print block (for lessons + references) has only
-        # body / .page / pre / a selectors; it does NOT have body.index
-        # because the global rules lose to body.index at 0,0,1 vs 0,1,1.
-        has_index_print = any(
-            "body.index" in block and "body.index .page" in block for block in print_blocks
-        )
-        self.assertTrue(
-            has_index_print,
-            f"no @media print block in {theme_css_path.relative_to(ROOT)} "
-            "contains the required body.index + body.index .page rules. "
-            "The index will print at the screen layout instead of the "
-            f"print layout. Print blocks found: {print_blocks}",
+        # Delegates to the CSS lint (scripts/css_lint.py) so the test
+        # and the prek hook share the same regex + logic. The lint
+        # checks balanced @media blocks AND the body.index print block
+        # in one call -- this test is more comprehensive than it was
+        # before the refactor (it also catches unbalanced @media
+        # blocks).
+        errors = check_theme_css()
+        self.assertEqual(
+            errors,
+            [],
+            f"{ROOT / 'theme' / 'style.css'} failed CSS lint checks:\n"
+            + "\n".join(f"  - {e}" for e in errors),
         )
 
 
