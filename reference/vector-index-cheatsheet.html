@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vector Index Cheat Sheet</title>
+<style>
+  :root {
+    --ink: #1a1a1a; --ink-soft: #555; --paper: #fbfaf7;
+    --accent: #b8541b; --rule: #d8d2c1; --code-bg: #f4f1ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--paper); color: var(--ink);
+    font-family: "Charter", "Iowan Old Style", "Georgia", serif;
+    font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 800px; margin: 0 auto; padding: 36px 28px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 18px; margin: 32px 0 8px; border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
+  h3 { font-size: 14px; margin: 18px 0 6px; color: var(--accent); font-family: "SF Mono", monospace; text-transform: uppercase; letter-spacing: 0.05em; }
+  p { margin: 8px 0; }
+  code { font-family: "SF Mono", "Menlo", monospace; font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+  pre code { background: none; padding: 0; font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); font-size: 14px; vertical-align: top; }
+  th { font-weight: 600; color: var(--ink-soft); }
+  .math { font-style: italic; }
+  .meta { color: var(--ink-soft); font-size: 13px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  .card { border: 1px solid var(--rule); border-radius: 4px; padding: 10px 14px; }
+  @media print { body { font-size: 10pt; } .page { max-width: none; padding: 18px; } pre { font-size: 9pt; } a { color: var(--ink); text-decoration: none; } }
+</style>
+</head>
+<body>
+<main class="page">
+
+<h1>Vector Index Cheat Sheet</h1>
+<p class="meta">Quick reference. Pair with <code>lessons/0002-vector-search-at-scale.html</code>.</p>
+
+<h2>Algorithm families at a glance</h2>
+<table>
+  <tr><th>Algorithm</th><th>Mental model</th><th>Build cost</th><th>Query cost</th><th>Memory</th></tr>
+  <tr>
+    <td>Exact k-NN (brute force)</td>
+    <td>Compare against all vectors</td>
+    <td>0</td>
+    <td><span class="math">O(N · d)</span></td>
+    <td><span class="math">O(N · d)</span></td>
+  </tr>
+  <tr>
+    <td>HNSW</td>
+    <td>Multi-layer graph; navigate "social network"</td>
+    <td><span class="math">O(N · log N)</span></td>
+    <td><span class="math">O(log N)</span></td>
+    <td><span class="math">O(N · d + N · M)</span></td>
+  </tr>
+  <tr>
+    <td>IVF (flat)</td>
+    <td>Cluster vectors; search only nearest clusters</td>
+    <td><span class="math">O(N · k)</span> (k-means)</td>
+    <td><span class="math">O((N/nlist) · nprobe)</span></td>
+    <td><span class="math">O(N · d)</span></td>
+  </tr>
+  <tr>
+    <td>IVF + PQ</td>
+    <td>IVF + compressed vectors (~50 bytes each)</td>
+    <td>IVF + codebook build</td>
+    <td>Faster than IVF (cache-friendly)</td>
+    <td><span class="math">O(N · d / 64)</span></td>
+  </tr>
+</table>
+
+<h2>LanceDB index types (v0.33)</h2>
+<table>
+  <tr><th>Config class</th><th>Composed of</th><th>Best for</th></tr>
+  <tr><td><code>IvfFlat</code></td><td>IVF + no compression</td><td>Highest recall, more memory</td></tr>
+  <tr><td><code>IvfPq</code></td><td>IVF + Product Quantization</td><td>Billion-scale, memory-bound</td></tr>
+  <tr><td><code>IvfRq</code></td><td>IVF + RaBitQ</td><td>Max compression</td></tr>
+  <tr><td><code>IvfSq</code></td><td>IVF + Scalar Quantization</td><td>Light compression, fast</td></tr>
+  <tr><td><code>IvfHnswFlat</code></td><td>IVF + HNSW + no compression</td><td>Highest recall, low latency</td></tr>
+  <tr><td><code>IvfHnswPq</code></td><td>IVF + HNSW + PQ</td><td>Low latency + low memory</td></tr>
+  <tr><td><code>IvfHnswSq</code></td><td>IVF + HNSW + Scalar Quantization</td><td><strong>Default recommendation</strong>: best latency/recall balance</td></tr>
+</table>
+
+<h2>API quick reference</h2>
+
+<h3>Create an index</h3>
+<pre><code>from lancedb.pydantic import IvfPq, IvfHnswSq
+
+# IVF + PQ
+table.create_index("vector", config=IvfPq(
+    num_partitions=256,    # ~ rows // 4096
+    num_sub_vectors=96,    # ~ dim // 8
+    metric="cosine",
+))
+
+# IVF + HNSW + SQ (default recommendation for 100k–10M)
+table.create_index("vector", config=IvfHnswSq(
+    num_partitions=256,    # ~ rows // 1_048_576
+    m=16,
+    ef_construction=150,
+    metric="l2",
+))</code></pre>
+
+<h3>Search (with or without index)</h3>
+<pre><code># With index, ANN is used automatically
+results = table.search(query_vec).limit(10).to_list()
+
+# Force exact k-NN (bypass index, useful for ground-truth benchmarking)
+results = table.search(query_vec).bypass_vector_index().limit(10).to_list()</code></pre>
+
+<h2>Parameter cheat sheet</h2>
+<table>
+  <tr><th>Param</th><th>Algorithm</th><th>Phase</th><th>Effect of raising</th></tr>
+  <tr><td><code>M</code></td><td>HNSW</td><td>Build</td><td>↑ recall, ↑ memory, ↑ build time</td></tr>
+  <tr><td><code>ef_construction</code></td><td>HNSW</td><td>Build</td><td>↑ graph quality, ↑ build time</td></tr>
+  <tr><td><code>ef_search</code></td><td>HNSW</td><td>Query</td><td>↑ recall, ↓ query speed</td></tr>
+  <tr><td><code>nlist</code></td><td>IVF</td><td>Build</td><td>↑ query speed (up to a point), ↑ build time</td></tr>
+  <tr><td><code>nprobe</code></td><td>IVF</td><td>Query</td><td>↑ recall, ↓ query speed</td></tr>
+  <tr><td><code>num_partitions</code></td><td>IVF</td><td>Build</td><td>Same as <code>nlist</code></td></tr>
+  <tr><td><code>num_sub_vectors</code></td><td>PQ</td><td>Build</td><td>↑ recall, ↑ memory</td></tr>
+</table>
+
+<h2>When to use what (decision tree)</h2>
+<div class="grid">
+  <div class="card">
+    <strong>&lt; 100k rows</strong><br>
+    Don't create an index. Exact k-NN is faster overall and uses less memory.
+  </div>
+  <div class="card">
+    <strong>100k – 10M rows</strong><br>
+    <code>IvfHnswSq</code> with default params. Tune <code>M</code> and <code>ef_construction</code> if recall is low.
+  </div>
+  <div class="card">
+    <strong>10M+ rows, memory-bound</strong><br>
+    <code>IvfPq</code> or <code>IvfRq</code>. Accept 3–5% recall drop for 30–60× memory savings.
+  </div>
+  <div class="card">
+    <strong>Filtered queries (<code>where(...)</code>)</strong><br>
+    HNSW-backed indexes can be slower with filters. <code>IvfPq</code> or <code>IvfRq</code> handle filters more predictably.
+  </div>
+</div>
+
+<h2>The "magic triangle"</h2>
+<p>You can only pick two of three:</p>
+<ul>
+  <li><strong>Recall</strong> (did we get the right top-k?)</li>
+  <li><strong>Speed</strong> (how fast is the query?)</li>
+  <li><strong>Memory</strong> (how much RAM does the index use?)</li>
+</ul>
+<p>Index parameter tuning is the art of finding the best 2-of-3 point for your workload.</p>
+
+<h2>Recall benchmark recipe</h2>
+<pre><code>import random
+import lancedb
+from rag_pipeline import Embedder
+
+embedder = Embedder()
+db = lancedb.connect("data/lancedb")
+table = db.open_table("rag_chunks")
+
+# Sample 50 random query texts from your real index
+contents = table.to_pandas()["content"].tolist()
+samples = random.sample(contents, 50)
+
+recalls = []
+for text in samples:
+    qv = embedder.embed_one(text)
+
+    # Ground truth via exact k-NN
+    gt = table.search(qv).bypass_vector_index().limit(10).to_list()
+    gt_ids = {r["id"] for r in gt}
+
+    # Approximate
+    ann = table.search(qv).limit(10).to_list()
+    ann_ids = {r["id"] for r in ann}
+
+    recalls.append(len(gt_ids & ann_ids) / len(gt_ids))
+
+print(f"recall@10 mean = {sum(recalls) / len(recalls):.3f}")
+print(f"recall@10 min  = {min(recalls):.3f}")</code></pre>
+
+<p>Targets: <strong>mean ≥ 0.95</strong>, <strong>min ≥ 0.85</strong>. If min is too low, the index is missing queries that the user's intuition would say "should obviously work." Raise <code>ef_search</code> (HNSW) or <code>nprobe</code> (IVF) until you hit your target.</p>
+
+<h2>Glossary</h2>
+<table>
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td>Exact k-NN</td><td>Brute-force scan of every vector. O(N) per query. Default in LanceDB without an index.</td></tr>
+  <tr><td>ANN</td><td>Approximate Nearest Neighbor. Trades recall for speed.</td></tr>
+  <tr><td>Recall@k</td><td>Fraction of the true top-k that the index returned.</td></tr>
+  <tr><td>HNSW</td><td>Hierarchical Navigable Small World. Graph-based ANN.</td></tr>
+  <tr><td>IVF</td><td>Inverted File Index. Cluster-based ANN.</td></tr>
+  <tr><td>PQ</td><td>Product Quantization. Lossy vector compression.</td></tr>
+  <tr><td>Quantizer</td><td>The compression strategy inside an index: Flat (none), SQ (scalar), PQ (product), RQ (RaBitQ).</td></tr>
+  <tr><td>nprobe</td><td>How many IVF clusters to search at query time.</td></tr>
+  <tr><td>nlist</td><td>How many IVF clusters to build at index time.</td></tr>
+  <tr><td>Centroid</td><td>The "center" of an IVF cluster. Vectors assigned to the cluster are near it.</td></tr>
+  <tr><td>Cosine vs L2</td><td>Both are distance metrics. Cosine is direction-only; L2 is straight-line. With normalized vectors, they agree up to scale.</td></tr>
+  <tr><td>bypass_vector_index()</td><td>LanceDB method to force exact k-NN even when an index exists. Use it for ground-truth benchmarking.</td></tr>
+</table>
+
+</main>
+</body>
+</html>
